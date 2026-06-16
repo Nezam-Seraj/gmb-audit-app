@@ -1,0 +1,6 @@
+{
+  "name": "Circle Social GBP Auditor",
+  "description": "An expert Local SEO and Google Business Profile (GBP) audit tool with Google Search Grounding to evaluate and optimize listings.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
