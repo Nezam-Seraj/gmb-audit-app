@@ -188,10 +188,19 @@ export default function App() {
         })
       });
 
-      const data = await resp.json();
+      const contentType = resp.headers.get("content-type");
+      let data: any = null;
+      if (contentType && contentType.includes("application/json")) {
+        data = await resp.json();
+      }
 
       if (!resp.ok) {
-        throw new Error(data.error || "Server could not generate listing diagnostics. Ensure your API key is validated.");
+        const errorText = data?.error || (await resp.text()) || "Server could not generate listing diagnostics. Ensure your API key is validated.";
+        throw new Error(errorText);
+      }
+
+      if (!data) {
+        throw new Error("Server returned an invalid non-JSON response.");
       }
 
       setReport(data.report);
