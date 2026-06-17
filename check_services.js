@@ -1,6 +1,5 @@
 // Using global fetch
 
-
 async function testLocation(businessName, serviceLocation) {
   const payload = {
     businessName,
@@ -31,10 +30,19 @@ async function testLocation(businessName, serviceLocation) {
       services.forEach(s => console.log(`  - ${s}`));
     }
     
-    // Check if services have Canaan, CT when location is different
+    // Check for eliminated/hallucinated wellness services
+    const forbidden = ["reiki", "yoga", "art therapy", "music therapy", "alumni", "wilderness therapy", "sauna"];
+    const foundForbidden = services.filter(s => forbidden.some(f => s.toLowerCase().includes(f)));
+    if (foundForbidden.length > 0) {
+      console.error(`\n[FAIL] Found forbidden/hallucinated wellness services: ${foundForbidden.join(", ")}`);
+    } else {
+      console.log(`\n[PASS] No forbidden/hallucinated wellness services found.`);
+    }
+
+    // Check if services contain hardcoded Canaan, CT when location is Scottsdale or Wilton
     if (serviceLocation !== "Canaan, CT") {
       const hasCanaan = services.some(s => s.includes("Canaan"));
-      const hasCorrectLocation = services.some(s => s.includes(serviceLocation));
+      const hasCorrectLocation = services.some(s => s.includes(serviceLocation.split(",")[0].trim()));
       if (hasCanaan) {
         console.error(`\n[FAIL] Found hardcoded 'Canaan' in services for location '${serviceLocation}'!`);
       } else if (services.length > 0 && !hasCorrectLocation) {
@@ -58,6 +66,8 @@ async function testLocation(businessName, serviceLocation) {
 async function runTests() {
   await testLocation("Mountainside Treatment Center", "Canaan, CT");
   await testLocation("Mountainside Treatment Center", "Wilton, CT");
+  await testLocation("Scottsdale Recovery Center", "Scottsdale, AZ");
 }
 
 runTests();
+

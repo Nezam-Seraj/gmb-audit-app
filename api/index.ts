@@ -416,6 +416,7 @@ ${hintsText}
     if (!detectedLocation) {
       detectedLocation = "Canaan, CT";
     }
+    const detectedCity = detectedLocation.split(",")[0].trim();
 
     const prompt = `You are an expert consultant in Local SEO and Google Business Profile optimization. (The tool is called "Circle Social GBP Auditor", but "Circle Social" is NOT the name of the business you are auditing).
 Your goal is to analyze the following target: ${searchTarget}.
@@ -425,6 +426,43 @@ ${competitorPrompt}
 
 ${sourceSpecificInstructions}
 
+[STANDARD GBP SERVICES REFERENCE TAXONOMY]
+For the categories "Addiction Treatment Center", "Mental Health Service", and "Alcoholism Treatment Program", the official, standard pre-defined GBP services are:
+- Addiction Treatment Center:
+  * "Drug Rehabilitation"
+  * "Alcohol Rehabilitation"
+  * "Detoxification"
+  * "Intensive Outpatient Program"
+  * "Outpatient Addiction Treatment"
+  * "Medication-Assisted Treatment"
+  * "Substance Abuse Counseling"
+  * "Residential Treatment"
+  * "Partial Hospitalization Program"
+  * "Dual Diagnosis Treatment"
+  * "Aftercare Support"
+  * "Sober Living"
+- Mental Health Service:
+  * "Mental Health Treatment"
+  * "Psychiatric Evaluation"
+  * "Cognitive Behavioral Therapy"
+  * "Dialectical Behavior Therapy"
+  * "Depression Treatment"
+  * "Anxiety Treatment"
+  * "Trauma Therapy"
+  * "Medication Management"
+  * "Outpatient Mental Health Care"
+  * "Psychotherapy"
+  * "Telehealth Sessions"
+- Alcoholism Treatment Program:
+  * "Alcoholism Treatment"
+  * "Alcohol Detoxification"
+  * "Alcohol Counseling"
+  * "Outpatient Alcohol Rehab"
+  * "Residential Alcohol Treatment"
+  * "Relapse Prevention Planning"
+  * "Support Groups"
+[END TAXONOMY]
+
 CRITICAL INSTRUCTION: You MUST correctly identify the actual business name from the provided target. Do NOT output "Circle Social" or "Circle Social Inc" as the audited business name.
 CRITICAL INSTRUCTION: When reporting Categories (Primary and Secondary), you MUST ONLY use official Google My Business categories (refer to standard lists such as https://daltonluka.com/blog/google-my-business-categories). DO NOT hallucinate, guess, or make up category titles. Do NOT report generic developer types like 'health', 'point_of_interest', 'medical_clinic', or 'establishment' as categories if a more specific merchant-facing category (e.g., 'Addiction Treatment Center', 'Rehabilitation Center', 'Mental Health Clinic', 'Alcoholism Treatment Program', 'Mental Health Service') is active on the profile. Combine the injected types and Target Category Hints with search grounding to verify the exact category names visible on the business's public Maps profile, and list all that are active.
 CRITICAL INSTRUCTION: When auditing "Secondary categories" for the primary business, you MUST advise the user in the recommendation text to verify their secondary categories (such as 'Alcoholism Treatment Program', 'Mental Health Service', or 'Rehabilitation Center') by logging into their Google Business Profile dashboard. Explain that secondary categories are often hidden or restricted from standard public search snippets and Google Places API developer fields, so verifying them directly inside the GBP dashboard is a critical best practice. Ensure that you never report generic developer types like 'health' or 'medical_clinic' as categories.
@@ -432,10 +470,13 @@ CRITICAL INSTRUCTION: When auditing "Hours vs competitors", you MUST use the inj
 CRITICAL INSTRUCTION: When auditing "Google Posts activity", you MUST search for the business's posts using search grounding and specify the date and topic of the most recent post (e.g., "The last post was on June 12th regarding community outreach"). If no posts are found, rate the status as "Missing" and state clearly that there are no posts on the profile.
 CRITICAL INSTRUCTION: When auditing "Social Profiles", you MUST run targeted search queries (e.g., searching specifically for "[Business Name] Facebook", "[Business Name] Instagram", "[Business Name] LinkedIn") to verify their existence and active status. Verify if they display on the business's Google Business Profile knowledge panel, and specify exactly which platforms are active or linked.
 CRITICAL INSTRUCTION: When evaluating "Website URL", pay extreme attention to verify if the URL contains a UTM tracking parameter (e.g., "?utm_source=google"). If the URL does not contain UTM parameters, it is a negative finding.
-CRITICAL INSTRUCTION: When evaluating and extracting "Services" for "businessDetails.services", you MUST perform highly targeted search grounding queries (such as "[Business Name] Google Maps services" or "[Business Name] services list") to extract the exact custom services list from the public GMB profile/location page. The services list items on the profile are fully-titled and include the geographic location/city modifier (e.g., "in [City, State]" or "in [City]" matching the specific city/state of the audited business). For example, if the audited business is in ${detectedLocation}, the retrieved services must match the exact naming convention including the suffix (e.g., "Addiction Treatment in ${detectedLocation}", "Drug Rehab in ${detectedLocation}"). You are strictly prohibited from stripping location names or mapping them to generic categories, and you MUST avoid generic guesses, assumptions, or placeholder listings, ensuring a 1:1 match of the actual services list currently offered by the business.
-You MUST strictly avoid hallucinating services (such as clinical modalities, art/music/wilderness therapies, yoga, sauna, etc.) that are not listed on the public GMB profile.
+CRITICAL INSTRUCTION: When evaluating and extracting "Services" for "businessDetails.services", you MUST perform highly targeted search grounding queries (such as "[Business Name] Google Maps services" or "[Business Name] services list") to extract the services list from the public GMB profile/location page.
+If the active categories for the business include "Addiction Treatment Center", "Mental Health Service", or "Alcoholism Treatment Program", you MUST strictly map search findings to the provided [STANDARD GBP SERVICES REFERENCE TAXONOMY] and append the dynamic location modifier (either "in ${detectedCity}" or "in ${detectedLocation}"). For example, if the audited business is in ${detectedLocation}, the retrieved services must match the exact naming convention including the suffix (e.g., "Drug Rehabilitation in ${detectedCity}" or "Drug Rehabilitation in ${detectedLocation}").
+You MUST strictly exclude/filter out crawl noise, website-specific programs, or generic therapies (such as Reiki, Yoga, Art Therapy, Music Therapy, Alumni Services, Experiential Therapy, Individual/Group/Family/Couples Therapy, Acupuncture, etc.). Only standard predefined services from the taxonomy with the location modifier should be included for these categories.
+You are strictly prohibited from stripping location names, and you MUST avoid generic guesses, assumptions, or placeholder listings, ensuring a 1:1 match of the actual services list currently offered on the public GMB profile.
+You MUST strictly avoid hallucinating services that are not listed on the public GMB profile.
 You MUST strictly ignore directory sites (such as PsychologyToday, StartYourRecovery, Rehabs.com, etc.) for compiling the businessDetails.services list, focusing strictly on Google My Business / Google Maps search snippet or knowledge panel information.
-CRITICAL INSTRUCTION: You MUST populate the "businessDetails" object in the JSON response containing the primary business's details: "name", "address" (full formatted address), "phone", "websiteUrl" (the exact website URL), "services" (string array containing a 1:1 match of the actual custom services offered as retrieved by targeted grounding searches from the public GMB profile/location page, ensuring you avoid generic guesses or placeholders, strictly avoid hallucinating services not listed on the public GMB profile, strictly ignore directory sites like PsychologyToday, StartYourRecovery, and Rehabs.com, retain fully-titled service names including geographic location/city modifiers, and do not strip location names or map them to generic categories), and "socials" (string array of active social media profile links found).
+CRITICAL INSTRUCTION: You MUST populate the "businessDetails" object in the JSON response containing the primary business's details: "name", "address" (full formatted address), "phone", "websiteUrl" (the exact website URL), "services" (string array containing the mapped services based on the provided taxonomy and location modifiers, e.g., "Drug Rehabilitation in ${detectedCity}" or "Drug Rehabilitation in ${detectedLocation}", while strictly excluding crawl noise and generic therapies like Reiki, Yoga, Art/Music Therapy, Alumni Services, Experiential Therapy, Individual/Group/Family Therapy, and Acupuncture, and ignoring directory sites), and "socials" (string array of active social media profile links found).
 
 
 Search Grounding is highly active and encouraged: You MUST search live Google search results, Google Maps, and other public listing sources using search grounding to retrieve the business description, evaluate photos/videos (exterior, interior, team), analyze Google Posts activity, check review replies (reply rate), and find social media links. CRITICAL: For social profiles, you MUST run targeted search queries (e.g., "[Business Name] Facebook", "[Business Name] Instagram", "[Business Name] LinkedIn") using search grounding to verify the business's presence and check if they display in the Google My Business knowledge panel. Perform thorough, in-depth searches to gather real details and write specific, detailed analyses for the primary business and competitors. Avoid writing generic, placeholder, or bland statements.
@@ -506,7 +547,7 @@ Return ONLY a structured JSON object with this exact schema so the frontend can 
     "address": "string (Exact formatted address)",
     "phone": "string (Exact phone number)",
     "websiteUrl": "string (Exact website URL)",
-    "services": ["string (Exact custom services offered from the GMB profile/location page, fully-titled and retaining geographic location/city modifiers, e.g., 'Addiction Treatment in ${detectedLocation}'. Strictly avoid hallucinating services not listed on the public GMB profile, and strictly ignore directory sites for compiling this list.)"],
+    "services": ["string (Exact custom services offered from the GMB profile/location page, mapped to the standard GBP taxonomy for Addiction Treatment, Mental Health, and Alcoholism Treatment, and retaining geographic location modifiers, e.g., 'Drug Rehabilitation in ${detectedCity}' or 'Drug Rehabilitation in ${detectedLocation}'. Strictly exclude crawl noise and generic therapies like Reiki, Yoga, Art/Music/Experiential Therapy, Alumni Services, Individual/Group/Family/Couples Therapy, Acupuncture.)"],
     "socials": ["string (Social media profile links found)"]
   }
 }`;
@@ -570,7 +611,7 @@ Return ONLY a structured JSON object with this exact schema so the frontend can 
             services: {
               type: Type.ARRAY,
               items: { type: Type.STRING },
-              description: `Exact custom services offered from the GMB profile/location page, fully-titled and retaining geographic location/city modifiers, e.g., 'Addiction Treatment in ${detectedLocation}'. Strictly avoid hallucinating services not listed on the public GMB profile, and strictly ignore directory sites.`
+              description: `Exact custom services offered from the GMB profile/location page, mapped to the standard GBP taxonomy for Addiction Treatment, Mental Health, and Alcoholism Treatment, and retaining geographic location modifiers, e.g., 'Drug Rehabilitation in ${detectedCity}' or 'Drug Rehabilitation in ${detectedLocation}'. Strictly exclude crawl noise and generic therapies like Reiki, Yoga, Art/Music/Experiential Therapy, Alumni Services, Individual/Group/Family Therapy, Acupuncture.`
             },
             socials: {
               type: Type.ARRAY,
