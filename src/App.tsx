@@ -29,7 +29,8 @@ import {
   ChevronUp,
   History,
   TrendingUp,
-  Star
+  Star,
+  Info
 } from "lucide-react";
 import { AuditReport, SavedAudit, GroundingSource, AuditSection } from "./types";
 import { LocationMap } from "./components/LocationMap";
@@ -59,14 +60,7 @@ export default function App() {
   const [history, setHistory] = useState<SavedAudit[]>([]);
   const [showHistory, setShowHistory] = useState(false);
 
-  // SEO Simulator state
-  const [simNameCorrect, setSimNameCorrect] = useState(true);
-  const [simCategoryMatch, setSimCategoryMatch] = useState(true);
-  const [simDescOptimal, setSimDescOptimal] = useState(false);
-  const [simRecentPhotos, setSimRecentPhotos] = useState(false);
-  const [simReviewReplies, setSimReviewReplies] = useState(50); // % of replies
-  const [simPostingFrequency, setSimPostingFrequency] = useState(0); // posts per month
-  const [simAttributesComp, setSimAttributesComp] = useState(false);
+
 
   // Loading steps animation
   const loadingPhases = [
@@ -249,27 +243,7 @@ export default function App() {
         });
       setFixes(neededFixes);
 
-      // Populate predictive simulator with values reflecting output
-      const coreInfo = data.report.sections.find((s: any) => s.title.includes("Core") || s.title.includes("Information") || s.title.includes("NAP"));
-      const categorySec = data.report.sections.find((s: any) => s.title.includes("Category") || s.title.includes("Categories"));
-      const descSec = data.report.sections.find((s: any) => s.title.includes("Description"));
-      const visualSec = data.report.sections.find((s: any) => s.title.includes("Visual") || s.title.includes("Photo"));
-      const reviewsSec = data.report.sections.find((s: any) => s.title.includes("Review") || s.title.includes("Rating"));
-      const postsSec = data.report.sections.find((s: any) => s.title.includes("Post") || s.title.includes("Update") || s.title.includes("Activity"));
-      const attributesSec = data.report.sections.find((s: any) => s.title.includes("Technical") || s.title.includes("Attribute") || s.title.includes("Link"));
 
-      setSimNameCorrect(coreInfo ? coreInfo.status === "Optimized" : true);
-      setSimCategoryMatch(categorySec ? categorySec.status === "Optimized" : true);
-      setSimDescOptimal(descSec ? descSec.status === "Optimized" : false);
-      setSimRecentPhotos(visualSec ? visualSec.status === "Optimized" : false);
-      setSimAttributesComp(attributesSec ? attributesSec.status === "Optimized" : false);
-
-      if (reviewsSec) {
-        setSimReviewReplies(reviewsSec.status === "Optimized" ? 95 : reviewsSec.status === "Needs Improvement" ? 45 : 10);
-      }
-      if (postsSec) {
-        setSimPostingFrequency(postsSec.status === "Optimized" ? 4 : postsSec.status === "Needs Improvement" ? 1 : 0);
-      }
 
       // Save report to localStorage timeline
       saveAuditToHistory(data.report, data.sources || [], targetUrl, targetName, data.location, data.placesApiStatus);
@@ -285,95 +259,11 @@ export default function App() {
   const handleToggleFix = (id: string) => {
     setFixes((prev) => {
       const updated = prev.map((f) => (f.id === id ? { ...f, completed: !f.completed } : f));
-      const toggledFix = updated.find((f) => f.id === id);
-      if (toggledFix && toggledFix.simKey) {
-        const completed = toggledFix.completed;
-        if (toggledFix.simKey === "name") {
-          setSimNameCorrect(completed);
-        } else if (toggledFix.simKey === "category") {
-          setSimCategoryMatch(completed);
-        } else if (toggledFix.simKey === "description") {
-          setSimDescOptimal(completed);
-        } else if (toggledFix.simKey === "photos") {
-          setSimRecentPhotos(completed);
-        } else if (toggledFix.simKey === "replies") {
-          setSimReviewReplies(completed ? 95 : 10);
-        } else if (toggledFix.simKey === "posts") {
-          setSimPostingFrequency(completed ? 4 : 0);
-        } else if (toggledFix.simKey === "attributes") {
-          const attrsItems = updated.filter((f) => f.simKey === "attributes");
-          const allAttrsCompleted = attrsItems.every((f) => f.completed);
-          setSimAttributesComp(allAttrsCompleted);
-        }
-      }
       return updated;
     });
   };
 
-  useEffect(() => {
-    setFixes((prev) => {
-      let changed = false;
-      const updated = prev.map((f) => {
-        let targetCompleted = f.completed;
-        if (f.simKey === "name") {
-          targetCompleted = simNameCorrect;
-        } else if (f.simKey === "category") {
-          targetCompleted = simCategoryMatch;
-        } else if (f.simKey === "description") {
-          targetCompleted = simDescOptimal;
-        } else if (f.simKey === "photos") {
-          targetCompleted = simRecentPhotos;
-        } else if (f.simKey === "replies") {
-          const repliesItems = prev.filter((item) => item.simKey === "replies");
-          const allCompleted = repliesItems.every((item) => item.completed);
-          const simStateCompleted = simReviewReplies >= 80;
-          if (simStateCompleted && !allCompleted) {
-            targetCompleted = true;
-          } else if (!simStateCompleted && allCompleted) {
-            targetCompleted = false;
-          } else {
-            targetCompleted = f.completed;
-          }
-        } else if (f.simKey === "posts") {
-          const postsItems = prev.filter((item) => item.simKey === "posts");
-          const allCompleted = postsItems.every((item) => item.completed);
-          const simStateCompleted = simPostingFrequency >= 4;
-          if (simStateCompleted && !allCompleted) {
-            targetCompleted = true;
-          } else if (!simStateCompleted && allCompleted) {
-            targetCompleted = false;
-          } else {
-            targetCompleted = f.completed;
-          }
-        } else if (f.simKey === "attributes") {
-          const attrsItems = prev.filter((item) => item.simKey === "attributes");
-          const allCompleted = attrsItems.every((item) => item.completed);
-          if (simAttributesComp && !allCompleted) {
-            targetCompleted = true;
-          } else if (!simAttributesComp && allCompleted) {
-            targetCompleted = false;
-          } else {
-            targetCompleted = f.completed;
-          }
-        }
 
-        if (targetCompleted !== f.completed) {
-          changed = true;
-          return { ...f, completed: targetCompleted };
-        }
-        return f;
-      });
-      return changed ? updated : prev;
-    });
-  }, [
-    simNameCorrect,
-    simCategoryMatch,
-    simDescOptimal,
-    simRecentPhotos,
-    simReviewReplies,
-    simPostingFrequency,
-    simAttributesComp
-  ]);
 
   // Copy report summary to clipboard
   const handleCopySummary = () => {
@@ -403,26 +293,7 @@ export default function App() {
     }, 400);
   };
 
-  // Calculated simulated score based on client variables (Sum to 100 maximum matches standard weights)
-  const simulatedScore = (() => {
-    let score = 0;
-    // 1. Core Info (20 points max)
-    score += simNameCorrect ? 20 : 8;
-    // 2. Categories (15 points max)
-    score += simCategoryMatch ? 15 : 5;
-    // 3. Description (10 points max)
-    score += simDescOptimal ? 10 : 3;
-    // 4. Photos (15 points max)
-    score += simRecentPhotos ? 15 : 5;
-    // 5. Reviews Reply score (20 points max)
-    score += Math.round((simReviewReplies / 100) * 20);
-    // 6. Posting activity (10 points max)
-    score += simPostingFrequency >= 4 ? 10 : simPostingFrequency >= 1 ? 6 : 2;
-    // 7. Attributes checklist (10 points max)
-    score += simAttributesComp ? 10 : 4;
 
-    return Math.min(100, Math.max(0, score));
-  })();
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans antialiased selection:bg-teal-500 selection:text-white pb-16">
@@ -548,152 +419,93 @@ export default function App() {
             </div>
           </div>
 
-          {/* Local SEO Impact Simulator Widget */}
-          <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <Sliders className="h-4 w-4 text-teal-600" />
-                <h3 className="text-xs font-bold text-slate-600 uppercase tracking-widest">
-                  SEO Impact Simulator
-                </h3>
+          {/* GBP Profile Details Card */}
+          {report && report.businessDetails ? (
+            <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-4">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <Info className="h-4 w-4 text-teal-600" />
+                  <h3 className="text-xs font-bold text-slate-600 uppercase tracking-widest">
+                    GBP Profile Details
+                  </h3>
+                </div>
+                <span className="text-[9px] font-mono bg-teal-50 text-teal-600 border border-teal-200 px-1.5 py-0.5 rounded font-bold">
+                  VERIFIED DATA
+                </span>
               </div>
-              <span className="text-[9px] font-mono bg-teal-50 text-teal-600 border border-teal-200 px-1.5 py-0.5 rounded font-bold">
-                PROJECTIONS
-              </span>
-            </div>
-            
-            <p className="text-xs text-slate-500 leading-relaxed">
-              Tweak indicators to visualize how prospective profile updates directly impact your estimated Local Rank Authority score.
-            </p>
-
-            {/* Score Projection Visual */}
-            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between gap-4">
-              <div>
-                <p className="text-[9px] font-bold text-slate-450 uppercase tracking-widest">Projected Rating</p>
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[18px] font-display font-black text-slate-800">
-                    {simulatedScore}
-                  </span>
-                  <span className="text-slate-400 text-sm font-bold">/100</span>
+              
+              <div className="space-y-3 pt-1 text-xs">
+                <div>
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Business Name</span>
+                  <span className="text-slate-800 font-semibold">{report.businessDetails.name || "N/A"}</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Address</span>
+                  <span className="text-slate-700">{report.businessDetails.address || "N/A"}</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Phone</span>
+                  <span className="text-slate-700">{report.businessDetails.phone || "N/A"}</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider font-sans">Website URL</span>
+                  {report.businessDetails.websiteUrl && report.businessDetails.websiteUrl !== "Not provided" && report.businessDetails.websiteUrl !== "N/A" ? (
+                    <a href={report.businessDetails.websiteUrl} target="_blank" rel="noopener noreferrer" className="text-teal-655 hover:underline break-all">
+                      {report.businessDetails.websiteUrl}
+                    </a>
+                  ) : (
+                    <span className="text-slate-700">N/A</span>
+                  )}
+                </div>
+                <div>
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Services</span>
+                  {report.businessDetails.services && report.businessDetails.services.length > 0 ? (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {report.businessDetails.services.map((service, idx) => (
+                        <span key={idx} className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[10px]">
+                          {service}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-slate-700">None detected</span>
+                  )}
+                </div>
+                <div>
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider font-sans">Socials</span>
+                  {report.businessDetails.socials && report.businessDetails.socials.length > 0 ? (
+                    <div className="flex flex-col gap-1 mt-1">
+                      {report.businessDetails.socials.map((social, idx) => (
+                        <a key={idx} href={social} target="_blank" rel="noopener noreferrer" className="text-teal-650 hover:underline break-all">
+                          {social}
+                        </a>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-slate-700">None detected</span>
+                  )}
                 </div>
               </div>
-
-              <div className="text-right">
-                <span className={`text-[9px] px-2 py-0.5 rounded font-mono font-bold uppercase tracking-widest ${
-                  simulatedScore >= 85 
-                    ? "bg-teal-50 text-teal-700 border border-teal-200" 
-                    : simulatedScore >= 65 
-                      ? "bg-amber-50 text-amber-705 border border-amber-200" 
-                      : "bg-rose-50 text-rose-700 border border-rose-200"
-                }`}>
-                  {simulatedScore >= 85 ? "Excellent" : simulatedScore >= 65 ? "Fair Rank" : "Weak Rank"}
-                </span>
-                <p className="text-[10px] text-slate-500 mt-1 leading-tight">algorithmic potential</p>
-              </div>
             </div>
-
-            {/* Controls */}
-            <div className="space-y-3 pt-1">
-              {/* Name spam check */}
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-700 flex items-center gap-1.5 font-medium">
-                  🛡️ No Name Stuffing <span className="text-[9px] font-mono text-slate-400">(20%)</span>
-                </span>
-                <button
-                  onClick={() => setSimNameCorrect(!simNameCorrect)}
-                  className={`w-10 h-6 rounded-full transition-colors relative duration-300 ${simNameCorrect ? "bg-teal-600" : "bg-slate-200 border border-slate-300"}`}
-                >
-                  <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-all ${simNameCorrect ? "left-5" : "left-1"}`}></div>
-                </button>
-              </div>
-
-              {/* Category relevance */}
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-700 flex items-center gap-1.5 font-medium font-sans">
-                  📂 Primary & Secondary Categories <span className="text-[9px] font-mono text-slate-400">(15%)</span>
-                </span>
-                <button
-                  onClick={() => setSimCategoryMatch(!simCategoryMatch)}
-                  className={`w-10 h-6 rounded-full transition-colors relative duration-300 ${simCategoryMatch ? "bg-teal-600" : "bg-slate-200 border border-slate-300"}`}
-                >
-                  <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-all ${simCategoryMatch ? "left-5" : "left-1"}`}></div>
-                </button>
-              </div>
-
-              {/* Description status */}
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-700 flex items-center gap-1.5 font-medium">
-                  ✏️ Optimized 750-Char Description <span className="text-[9px] font-mono text-slate-400">(10%)</span>
-                </span>
-                <button
-                  onClick={() => setSimDescOptimal(!simDescOptimal)}
-                  className={`w-10 h-6 rounded-full transition-colors relative duration-300 ${simDescOptimal ? "bg-teal-600" : "bg-slate-200 border border-slate-300"}`}
-                >
-                  <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-all ${simDescOptimal ? "left-5" : "left-1"}`}></div>
-                </button>
-              </div>
-
-              {/* Photos & Visuals */}
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-700 flex items-center gap-1.5 font-medium">
-                  📸 Recent Visual Assets <span className="text-[9px] font-mono text-slate-400">(15%)</span>
-                </span>
-                <button
-                  onClick={() => setSimRecentPhotos(!simRecentPhotos)}
-                  className={`w-10 h-6 rounded-full transition-colors relative duration-300 ${simRecentPhotos ? "bg-teal-600" : "bg-slate-200 border border-slate-300"}`}
-                >
-                  <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-all ${simRecentPhotos ? "left-5" : "left-1"}`}></div>
-                </button>
-              </div>
-
-              {/* Reply rate slider */}
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs text-slate-700 font-medium">
-                  <span>💬 Review Reply Rate <span className="text-[9px] font-mono text-slate-400">(20%)</span></span>
-                  <span className="font-mono text-teal-600 font-bold">{simReviewReplies}%</span>
+          ) : (
+            <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-4">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <Info className="h-4 w-4 text-slate-400" />
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                    GBP Profile Details
+                  </h3>
                 </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  step="5"
-                  value={simReviewReplies}
-                  onChange={(e) => setSimReviewReplies(Number(e.target.value))}
-                  className="w-full accent-teal-600 h-1.5 bg-slate-100 rounded-lg cursor-pointer"
-                />
-              </div>
-
-              {/* Posting activity */}
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs text-slate-700 font-medium">
-                  <span>📰 Monthly Posts & Updates <span className="text-[9px] font-mono text-slate-400">(10%)</span></span>
-                  <span className="font-mono text-teal-600 font-bold">{simPostingFrequency} / mo</span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="8"
-                  step="1"
-                  value={simPostingFrequency}
-                  onChange={(e) => setSimPostingFrequency(Number(e.target.value))}
-                  className="w-full accent-teal-600 h-1.5 bg-slate-100 rounded-lg cursor-pointer"
-                />
-              </div>
-
-              {/* Technical / attributes */}
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-700 flex items-center gap-1.5 font-medium font-sans">
-                  ⚙️ Complete Attribute Checklist <span className="text-[9px] font-mono text-slate-400">(10%)</span>
+                <span className="text-[9px] font-mono bg-slate-50 text-slate-400 border border-slate-200 px-1.5 py-0.5 rounded font-bold">
+                  PENDING AUDIT
                 </span>
-                <button
-                  onClick={() => setSimAttributesComp(!simAttributesComp)}
-                  className={`w-10 h-6 rounded-full transition-colors relative duration-300 ${simAttributesComp ? "bg-teal-600" : "bg-slate-200 border border-slate-300"}`}
-                >
-                  <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-all ${simAttributesComp ? "left-5" : "left-1"}`}></div>
-                </button>
               </div>
+              
+              <p className="text-xs text-slate-505 leading-relaxed italic">
+                Run an audit to view live GBP profile details including Name, Address, Phone, Website, Services, and Social links.
+              </p>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Right Side / Middle Area: Audit Output and Search Progress */}
@@ -1286,7 +1098,7 @@ export default function App() {
                               <span className="block text-[10px] text-teal-600 font-bold uppercase tracking-widest mb-1 flex items-center gap-1">
                                 <CheckCircle className="h-3 w-3" /> Advantage
                               </span>
-                              <p className="text-slate-600 leading-snug font-sans truncate">
+                              <p className="text-slate-600 leading-snug font-sans">
                                 {comp.keyAdvantage}
                               </p>
                             </div>
@@ -1294,7 +1106,7 @@ export default function App() {
                               <span className="block text-[10px] text-rose-500 font-bold uppercase tracking-widest mb-1 flex items-center gap-1">
                                 <AlertTriangle className="h-3 w-3" /> Weakness
                               </span>
-                              <p className="text-slate-600 leading-snug font-sans truncate">
+                              <p className="text-slate-600 leading-snug font-sans">
                                 {comp.weakness}
                               </p>
                             </div>

@@ -25,12 +25,22 @@ export interface CompetitorAnalysis {
   reviewVelocity: string;
 }
 
+export interface BusinessDetails {
+  name: string;
+  address: string;
+  phone: string;
+  websiteUrl: string;
+  services: string[];
+  socials: string[];
+}
+
 export interface AuditReport {
   businessName: string;
   overallScore: number;
   summary: string;
   sections: AuditSection[];
   competitors?: CompetitorAnalysis[];
+  businessDetails?: BusinessDetails;
 }
 
 export interface LocationData {

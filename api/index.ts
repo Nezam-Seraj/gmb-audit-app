@@ -358,7 +358,7 @@ ${compText}
       ? `\nAdditionally, use the provided Service & City keyword ("${serviceLocation}") to identify the real, live top 3 ranking competitors in the local search results on Google Maps. CRITICAL: DO NOT HALLUCINATE COMPETITORS. Only use real businesses that actually exist and rank for this keyword. Compare them against the primary business and provide your analysis in the "competitors" JSON array. Pay special attention to these local ranking factors:
 1. Business Name: Are they adding keywords into their actual name? (Keyword stuffing in the title). If competitors are doing it, it's a massive ranking factor and the primary business is at a disadvantage. Adding keywords to the primary business name for parity would be a ranking boost, but could lead to profile suspension. This must be presented as an informed decision.
 2. Categories: What is their primary category? CRITICAL: Be extremely accurate with secondary categories. DO NOT guess or hallucinate secondary categories. Only list secondary categories you have hard evidence for.
-3. Review Velocity: Estimate review frequency based on total reviews over time or recent visible activity. BE CONSERVATIVE and do not over-estimate or hallucinate review counts. State the EXACT, TRUE review count for these competitors.` 
+3. Review Velocity: Estimate review frequency specifically targeting a 180-day timespan with a numerical estimate (e.g., '15 reviews in the last 180 days'). BE CONSERVATIVE and do not over-estimate or hallucinate review counts. State the EXACT, TRUE review count for these competitors.` 
       : "";
 
     let sourceSpecificInstructions = "";
@@ -395,6 +395,7 @@ CRITICAL INSTRUCTION: When auditing "Google Posts activity", you MUST search for
 CRITICAL INSTRUCTION: When auditing "Social Profiles", you MUST run targeted search queries (e.g., searching specifically for "[Business Name] Facebook", "[Business Name] Instagram", "[Business Name] LinkedIn") to verify their existence and active status. Verify if they display on the business's Google Business Profile knowledge panel, and specify exactly which platforms are active or linked.
 CRITICAL INSTRUCTION: When evaluating "Website URL", pay extreme attention to verify if the URL contains a UTM tracking parameter (e.g., "?utm_source=google"). If the URL does not contain UTM parameters, it is a negative finding.
 CRITICAL INSTRUCTION: When evaluating "Services", ensure you thoroughly check the real profile. GBP services are often found in the profile menus or service lists. Report on what is actually there before claiming they are missing.
+CRITICAL INSTRUCTION: You MUST populate the "businessDetails" object in the JSON response containing the primary business's details: "name", "address" (full formatted address), "phone", "websiteUrl" (the exact website URL), "services" (string array of individual services offered by the business), and "socials" (string array of active social media profile links found).
 
 
 Search Grounding is highly active and encouraged: You MUST search live Google search results, Google Maps, and other public listing sources using search grounding to retrieve the business description, evaluate photos/videos (exterior, interior, team), analyze Google Posts activity, check review replies (reply rate), and find social media links. CRITICAL: For social profiles, you MUST run targeted search queries (e.g., "[Business Name] Facebook", "[Business Name] Instagram", "[Business Name] LinkedIn") using search grounding to verify the business's presence and check if they display in the Google My Business knowledge panel. Perform thorough, in-depth searches to gather real details and write specific, detailed analyses for the primary business and competitors. Avoid writing generic, placeholder, or bland statements.
@@ -404,7 +405,7 @@ Conduct a rigorous audit against the following tiered criteria (Scores sum to 11
 **Tier 1 — Highest impact**
 1. Business name competitive analysis: (Category: Ranking Factor, Weight: 15pts) - Detect keyword stuffing in the name. If competitors are stuffing keywords and the primary business is not, flag it as a risk/disadvantage. State that adding keywords for a ranking boost carries a risk of profile suspension (an informed decision must be made).
 2. Primary category match: (Category: Ranking Factor, Weight: 15pts) - Identify its Primary category. Does it perfectly match what is ranking locally for the service?
-3. Review velocity vs competitors: (Category: Ranking Factor, Weight: 12pts) - Estimate review frequency based on total reviews over time or recent visible activity. BE CONSERVATIVE and do not over-estimate or hallucinate exact numbers without evidence. How does their velocity compare to the top competitors?
+3. Review velocity vs competitors: (Category: Ranking Factor, Weight: 12pts) - Estimate review frequency specifically targeting a 180-day timespan with a numerical estimate (e.g., '15 reviews in the last 180 days'). BE CONSERVATIVE and do not over-estimate or hallucinate exact numbers without evidence. How does their velocity compare to the top competitors?
 
 **Tier 2 — Strong signals**
 4. Secondary categories gap analysis: (Category: Ranking Factor, Weight: 10pts) - Are they missing critical secondary categories that top ranking competitors use? CRITICAL: DO NOT hallucinate secondary categories if they are not explicitly present. Only list gaps you are certain of.
@@ -457,9 +458,17 @@ Return ONLY a structured JSON object with this exact schema so the frontend can 
       "keywordsInName": "boolean (true if they are using keywords in their name)",
       "primaryCategory": "string",
       "secondaryCategories": ["string"],
-      "reviewVelocity": "string (Describe their review frequency, e.g., 'High - ~5 per month')"
+      "reviewVelocity": "string (Describe their review frequency targeting a 180-day timespan with a numerical estimate, e.g., '15 reviews in the last 180 days')"
     }
-  ]
+  ],
+  "businessDetails": {
+    "name": "string (Exact business name)",
+    "address": "string (Exact formatted address)",
+    "phone": "string (Exact phone number)",
+    "websiteUrl": "string (Exact website URL)",
+    "services": ["string (Individual services offered)"],
+    "socials": ["string (Social media profile links found)"]
+  }
 }`;
 
     const auditReportSchema = {
@@ -510,9 +519,27 @@ Return ONLY a structured JSON object with this exact schema so the frontend can 
             },
             required: ["name", "estimatedScore", "keyAdvantage", "weakness", "keywordsInName", "primaryCategory", "secondaryCategories", "reviewVelocity"]
           }
+        },
+        businessDetails: {
+          type: Type.OBJECT,
+          properties: {
+            name: { type: Type.STRING },
+            address: { type: Type.STRING },
+            phone: { type: Type.STRING },
+            websiteUrl: { type: Type.STRING },
+            services: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING }
+            },
+            socials: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING }
+            }
+          },
+          required: ["name", "address", "phone", "websiteUrl", "services", "socials"]
         }
       },
-      required: ["businessName", "overallScore", "summary", "sections", "competitors"]
+      required: ["businessName", "overallScore", "summary", "sections", "competitors", "businessDetails"]
     };
 
     const response = await client.models.generateContent({
@@ -628,7 +655,7 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  app.listen(Number(PORT), "0.0.0.0", () => {
     console.log(`Express custom server running on http://0.0.0.0:${PORT}`);
   });
 }
