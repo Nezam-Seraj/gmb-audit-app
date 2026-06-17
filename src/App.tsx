@@ -450,7 +450,7 @@ export default function App() {
                 <div>
                   <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider font-sans">Website URL</span>
                   {report.businessDetails.websiteUrl && report.businessDetails.websiteUrl !== "Not provided" && report.businessDetails.websiteUrl !== "N/A" ? (
-                    <a href={report.businessDetails.websiteUrl} target="_blank" rel="noopener noreferrer" className="text-teal-655 hover:underline break-all">
+                    <a href={report.businessDetails.websiteUrl} target="_blank" rel="noopener noreferrer" className="text-teal-600 hover:underline break-all">
                       {report.businessDetails.websiteUrl}
                     </a>
                   ) : (
@@ -476,7 +476,7 @@ export default function App() {
                   {report.businessDetails.socials && report.businessDetails.socials.length > 0 ? (
                     <div className="flex flex-col gap-1 mt-1">
                       {report.businessDetails.socials.map((social, idx) => (
-                        <a key={idx} href={social} target="_blank" rel="noopener noreferrer" className="text-teal-650 hover:underline break-all">
+                        <a key={idx} href={social} target="_blank" rel="noopener noreferrer" className="text-teal-600 hover:underline break-all">
                           {social}
                         </a>
                       ))}
@@ -501,7 +501,7 @@ export default function App() {
                 </span>
               </div>
               
-              <p className="text-xs text-slate-505 leading-relaxed italic">
+              <p className="text-xs text-slate-500 leading-relaxed italic">
                 Run an audit to view live GBP profile details including Name, Address, Phone, Website, Services, and Social links.
               </p>
             </div>
@@ -517,7 +517,7 @@ export default function App() {
               <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2">
                   <History className="h-4 w-4 text-teal-600" />
-                  <h3 className="text-sm font-bold text-slate-750 uppercase tracking-widest font-sans">
+                  <h3 className="text-sm font-bold text-slate-700 uppercase tracking-widest font-sans">
                     History
                   </h3>
                 </div>
@@ -568,7 +568,7 @@ export default function App() {
                         </span>
                         <button
                           onClick={(e) => deleteHistoryItem(item.id, e)}
-                          className="text-slate-450 hover:text-rose-600 p-1 rounded hover:bg-rose-50 transition-colors cursor-pointer"
+                          className="text-slate-400 hover:text-rose-600 p-1 rounded hover:bg-rose-50 transition-colors cursor-pointer"
                         >
                           <Trash2 className="h-3 w-3" />
                         </button>

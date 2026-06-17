@@ -124,6 +124,34 @@ function getCategoryHints(businessName: string, query: string): string[] {
   return Array.from(new Set(hints));
 }
 
+function extractCityState(address?: string, serviceLocation?: string): string {
+  if (address) {
+    const cleanAddress = address.replace(/,\s*(USA|United States)$/i, "").trim();
+    const parts = cleanAddress.split(",").map(p => p.trim());
+    if (parts.length >= 2) {
+      const statePart = parts[parts.length - 1];
+      const cityPart = parts[parts.length - 2];
+      const stateZipMatch = statePart.match(/^([A-Za-z]{2}|[A-Za-z\s]+)(?:\s+\d{5}(?:-\d{4})?)?$/);
+      if (stateZipMatch) {
+        const state = stateZipMatch[1].trim();
+        if (cityPart && !/^\d+/.test(cityPart)) {
+          return `${cityPart}, ${state}`;
+        }
+      }
+    }
+    const fallbackMatch = cleanAddress.match(/([^,]+),\s*([A-Za-z]{2})(?:\s+\d{5})?$/);
+    if (fallbackMatch) {
+      return `${fallbackMatch[1].trim()}, ${fallbackMatch[2].trim()}`;
+    }
+  }
+
+  if (serviceLocation) {
+    return serviceLocation.trim();
+  }
+
+  return "";
+}
+
 // 1. Audit Endpoint
 app.post("/api/audit", async (req, res) => {
   try {
@@ -132,6 +160,8 @@ app.post("/api/audit", async (req, res) => {
     if (!url && !businessName && !serviceLocation) {
       return res.status(400).json({ error: "Either a Google Business Profile URL, Business Name, or a Service/Location keywords are required." });
     }
+
+    let detectedLocation = serviceLocation ? serviceLocation.trim() : "";
 
     const client = getGeminiClient();
 
@@ -247,6 +277,10 @@ app.post("/api/audit", async (req, res) => {
             if (placesData.places && placesData.places.length > 0) {
               placesApiStatus = "success";
               const place = placesData.places[0];
+              const extracted = extractCityState(place.formattedAddress, serviceLocation);
+              if (extracted) {
+                detectedLocation = extracted;
+              }
               if (place.location && typeof place.location.latitude === 'number') {
                 mapLocationRef = {
                   lat: place.location.latitude,
@@ -379,6 +413,10 @@ ${hintsText}
 `;
     }
 
+    if (!detectedLocation) {
+      detectedLocation = "Canaan, CT";
+    }
+
     const prompt = `You are an expert consultant in Local SEO and Google Business Profile optimization. (The tool is called "Circle Social GBP Auditor", but "Circle Social" is NOT the name of the business you are auditing).
 Your goal is to analyze the following target: ${searchTarget}.
 ${placesApiContext}
@@ -394,8 +432,10 @@ CRITICAL INSTRUCTION: When auditing "Hours vs competitors", you MUST use the inj
 CRITICAL INSTRUCTION: When auditing "Google Posts activity", you MUST search for the business's posts using search grounding and specify the date and topic of the most recent post (e.g., "The last post was on June 12th regarding community outreach"). If no posts are found, rate the status as "Missing" and state clearly that there are no posts on the profile.
 CRITICAL INSTRUCTION: When auditing "Social Profiles", you MUST run targeted search queries (e.g., searching specifically for "[Business Name] Facebook", "[Business Name] Instagram", "[Business Name] LinkedIn") to verify their existence and active status. Verify if they display on the business's Google Business Profile knowledge panel, and specify exactly which platforms are active or linked.
 CRITICAL INSTRUCTION: When evaluating "Website URL", pay extreme attention to verify if the URL contains a UTM tracking parameter (e.g., "?utm_source=google"). If the URL does not contain UTM parameters, it is a negative finding.
-CRITICAL INSTRUCTION: When evaluating and extracting "Services" for "businessDetails.services", you MUST perform highly targeted search grounding queries (such as "[Business Name] Google Maps services" or "[Business Name] services list") to extract the exact custom services list from the public GMB profile/location page. The services list items on the profile are fully-titled and include the geographic location/city modifier (e.g., "in [City, State]" or "in [City]" matching the specific city/state of the audited business). For example, if the audited business is in Canaan, CT, the retrieved services must match the exact naming convention including the suffix (e.g., "Addiction Treatment in Canaan, CT", "Drug Rehab in Canaan, CT"). You are strictly prohibited from stripping location names or mapping them to generic categories, and you MUST avoid generic guesses, assumptions, or placeholder listings, ensuring a 1:1 match of the actual services list currently offered by the business.
-CRITICAL INSTRUCTION: You MUST populate the "businessDetails" object in the JSON response containing the primary business's details: "name", "address" (full formatted address), "phone", "websiteUrl" (the exact website URL), "services" (string array containing a 1:1 match of the actual custom services offered as retrieved by targeted grounding searches from the public GMB profile/location page, ensuring you avoid generic guesses or placeholders, retain fully-titled service names including geographic location/city modifiers, and do not strip location names or map them to generic categories), and "socials" (string array of active social media profile links found).
+CRITICAL INSTRUCTION: When evaluating and extracting "Services" for "businessDetails.services", you MUST perform highly targeted search grounding queries (such as "[Business Name] Google Maps services" or "[Business Name] services list") to extract the exact custom services list from the public GMB profile/location page. The services list items on the profile are fully-titled and include the geographic location/city modifier (e.g., "in [City, State]" or "in [City]" matching the specific city/state of the audited business). For example, if the audited business is in ${detectedLocation}, the retrieved services must match the exact naming convention including the suffix (e.g., "Addiction Treatment in ${detectedLocation}", "Drug Rehab in ${detectedLocation}"). You are strictly prohibited from stripping location names or mapping them to generic categories, and you MUST avoid generic guesses, assumptions, or placeholder listings, ensuring a 1:1 match of the actual services list currently offered by the business.
+You MUST strictly avoid hallucinating services (such as clinical modalities, art/music/wilderness therapies, yoga, sauna, etc.) that are not listed on the public GMB profile.
+You MUST strictly ignore directory sites (such as PsychologyToday, StartYourRecovery, Rehabs.com, etc.) for compiling the businessDetails.services list, focusing strictly on Google My Business / Google Maps search snippet or knowledge panel information.
+CRITICAL INSTRUCTION: You MUST populate the "businessDetails" object in the JSON response containing the primary business's details: "name", "address" (full formatted address), "phone", "websiteUrl" (the exact website URL), "services" (string array containing a 1:1 match of the actual custom services offered as retrieved by targeted grounding searches from the public GMB profile/location page, ensuring you avoid generic guesses or placeholders, strictly avoid hallucinating services not listed on the public GMB profile, strictly ignore directory sites like PsychologyToday, StartYourRecovery, and Rehabs.com, retain fully-titled service names including geographic location/city modifiers, and do not strip location names or map them to generic categories), and "socials" (string array of active social media profile links found).
 
 
 Search Grounding is highly active and encouraged: You MUST search live Google search results, Google Maps, and other public listing sources using search grounding to retrieve the business description, evaluate photos/videos (exterior, interior, team), analyze Google Posts activity, check review replies (reply rate), and find social media links. CRITICAL: For social profiles, you MUST run targeted search queries (e.g., "[Business Name] Facebook", "[Business Name] Instagram", "[Business Name] LinkedIn") using search grounding to verify the business's presence and check if they display in the Google My Business knowledge panel. Perform thorough, in-depth searches to gather real details and write specific, detailed analyses for the primary business and competitors. Avoid writing generic, placeholder, or bland statements.
@@ -466,7 +506,7 @@ Return ONLY a structured JSON object with this exact schema so the frontend can 
     "address": "string (Exact formatted address)",
     "phone": "string (Exact phone number)",
     "websiteUrl": "string (Exact website URL)",
-    "services": ["string (Exact custom services offered from the GMB profile/location page, fully-titled and retaining geographic location/city modifiers, e.g., 'Addiction Treatment in Canaan, CT')"],
+    "services": ["string (Exact custom services offered from the GMB profile/location page, fully-titled and retaining geographic location/city modifiers, e.g., 'Addiction Treatment in ${detectedLocation}'. Strictly avoid hallucinating services not listed on the public GMB profile, and strictly ignore directory sites for compiling this list.)"],
     "socials": ["string (Social media profile links found)"]
   }
 }`;
@@ -529,7 +569,8 @@ Return ONLY a structured JSON object with this exact schema so the frontend can 
             websiteUrl: { type: Type.STRING },
             services: {
               type: Type.ARRAY,
-              items: { type: Type.STRING }
+              items: { type: Type.STRING },
+              description: `Exact custom services offered from the GMB profile/location page, fully-titled and retaining geographic location/city modifiers, e.g., 'Addiction Treatment in ${detectedLocation}'. Strictly avoid hallucinating services not listed on the public GMB profile, and strictly ignore directory sites.`
             },
             socials: {
               type: Type.ARRAY,
