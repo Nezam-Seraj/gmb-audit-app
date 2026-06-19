@@ -32,6 +32,7 @@ export interface BusinessDetails {
   websiteUrl: string;
   services: string[];
   socials: string[];
+  servicesSource?: string;
 }
 
 export interface AuditReport {

@@ -460,13 +460,20 @@ export default function App() {
                 <div>
                   <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Services</span>
                   {report.businessDetails.services && report.businessDetails.services.length > 0 ? (
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {report.businessDetails.services.map((service, idx) => (
-                        <span key={idx} className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[10px]">
-                          {service}
-                        </span>
-                      ))}
-                    </div>
+                    <>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {report.businessDetails.services.map((service, idx) => (
+                          <span key={idx} className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[10px]">
+                            {service}
+                          </span>
+                        ))}
+                      </div>
+                      {report.businessDetails.servicesSource && (
+                        <p className="text-[10px] text-slate-500 mt-1.5 italic leading-relaxed">
+                          Note: {report.businessDetails.servicesSource}
+                        </p>
+                      )}
+                    </>
                   ) : (
                     <span className="text-slate-700">None detected</span>
                   )}

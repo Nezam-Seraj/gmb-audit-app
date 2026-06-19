@@ -361,7 +361,7 @@ The following categories are broad, developer-facing Google Places API types. Th
         if (compRes.ok) {
           const compData = await compRes.json();
           if (compData.places && compData.places.length > 0) {
-            const compList = compData.places.slice(0, 5);
+            const compList = compData.places.slice(0, 10);
             let compText = "";
             compList.forEach((place: any, index: number) => {
               const formattedCats = getFormattedCategories(place);
@@ -389,10 +389,10 @@ ${compText}
     }
 
     const competitorPrompt = serviceLocation 
-      ? `\nAdditionally, use the provided Service & City keyword ("${serviceLocation}") to identify the real, live top 3 ranking competitors in the local search results on Google Maps. CRITICAL: DO NOT HALLUCINATE COMPETITORS. Only use real businesses that actually exist and rank for this keyword. Compare them against the primary business and provide your analysis in the "competitors" JSON array. Pay special attention to these local ranking factors:
+      ? `\nAdditionally, use the provided Service & City keyword ("${serviceLocation}") to identify the real, live top 10 ranking competitors in the local search results on Google Maps. CRITICAL: DO NOT HALLUCINATE COMPETITORS. Only use real businesses that actually exist and rank for this keyword. Compare them against the primary business and provide your analysis in the "competitors" JSON array (which MUST contain up to 10 competitors based on the injected list of competitors). Pay special attention to these local ranking factors:
 1. Business Name: Are they adding keywords into their actual name? (Keyword stuffing in the title). If competitors are doing it, it's a massive ranking factor and the primary business is at a disadvantage. Adding keywords to the primary business name for parity would be a ranking boost, but could lead to profile suspension. This must be presented as an informed decision.
-2. Categories: What is their primary category? CRITICAL: Be extremely accurate with secondary categories. DO NOT guess or hallucinate secondary categories. Only list secondary categories you have hard evidence for.
-3. Review Velocity: Estimate review frequency specifically targeting a 180-day timespan with a numerical estimate (e.g., '15 reviews in the last 180 days'). BE CONSERVATIVE and do not over-estimate or hallucinate review counts. State the EXACT, TRUE review count for these competitors.` 
+2. Categories: What is their primary category? CRITICAL: Be extremely accurate with secondary categories. DO NOT guess or hallucinate secondary categories. Only list secondary categories you have hard evidence for. Enforce strict matching to official Google My Business categories (such as "Addiction Treatment Center", "Alcoholism Treatment Program", "Mental Health Service") and prohibit fake category names.
+3. Review Velocity: Enforce a numerical velocity estimate specifically targeting a 180-day timespan (e.g., '15 reviews in the last 180 days', or '0 reviews in the last 180 days' if none are found) for each competitor. Prohibit generic text or omissions. BE CONSERVATIVE and do not over-estimate or hallucinate review counts. State the EXACT, TRUE review count for these competitors.` 
       : "";
 
     let sourceSpecificInstructions = "";
@@ -401,14 +401,14 @@ ${compText}
 CRITICAL INTEGRITY INSTRUCTION:
 1. For reviews and ratings, you MUST use the exact numbers provided in the [CRITICAL GOOGLE PLACES API REAL-TIME DATA INJECTION] section (e.g. EXACT Real Total Review Count and EXACT Real Star Rating). Do NOT search the web to override or change these two numbers.
 2. For Website URL, Phone Number, and Formatted Address, use the exact values from the Places API injection. However, for the UTM parameter audit, you MUST use Search Grounding to check the live Google Maps profile's website button link. Do not assume the injection URL represents the live button's link. Check if the live button link contains UTM parameters (e.g., "?utm_source=google").
-3. For Categories (Primary and Secondary), you MUST use the injected "Primary Category (Mapped Place Type)" and "Associated Secondary Categories (Mapped Place Types)" as the baseline categories for the business, as these have been verified and mapped to official merchant-facing GMB categories. You may use search grounding to find additional details, but if they cannot be verified, you MUST explain in the recommendation text for "Secondary categories gap analysis" that secondary categories are hidden from standard search snippets and Places API developer fields, and advise the user to verify in their GBP dashboard. Ensure that you never report generic types like 'health' or 'medical_clinic' as categories.
+3. For Categories (Primary and Secondary), you MUST use the injected "Primary Category (Mapped Place Type)" and "Associated Secondary Categories (Mapped Place Types)" as the baseline categories for the business, as these have been verified and mapped to official merchant-facing GMB categories. You may use search grounding to find additional details, but if they cannot be verified, you MUST explain in the recommendation text for "Secondary categories gap analysis" that secondary categories are hidden from standard search snippets and Places API developer fields, and advise the user to verify in their GBP dashboard. Ensure that you never report fake category names or generic developer types like 'health' or 'medical_clinic' as categories; strictly enforce official GMB categories.
 `;
     } else {
       const categoryHints = getCategoryHints(finalBusinessName, googleMapsQuery);
       const hintsText = categoryHints.length > 0 ? `Target Category Hints (Based on Business/Query Keywords): ${categoryHints.join(", ")}` : "";
       sourceSpecificInstructions = `
 CRITICAL SEARCH GROUNDING INSTRUCTION: Google Places API real-time data is NOT available (status: ${placesApiStatus}). You MUST use Search Grounding to locate the exact business profile on Google Search and Google Maps. Search Grounding often returns heavily cached, outdated, or mixed-source review numbers. You MUST prioritize the HIGHEST Google Review count you can confidently verify from recent search snippets, and avoid including Yelp or Facebook review counts. For the Website URL, use search grounding to find the URL linked to the Google Business Profile website button and check if it contains a UTM tracking parameter (e.g., "?utm_source=google").
-For Categories (Primary and Secondary), you MUST use the provided "Target Category Hints" as baseline search candidates. You may use search grounding to find additional details, but if they cannot be verified, you MUST explain in the recommendation text for "Secondary categories gap analysis" that secondary categories are hidden from standard search snippets and Places API developer fields, and advise the user to verify in their GBP dashboard. Do not report generic types like 'health' or 'medical_clinic'; instead, report specific GMB categories.
+For Categories (Primary and Secondary), you MUST use the provided "Target Category Hints" as baseline search candidates. You may use search grounding to find additional details, but if they cannot be verified, you MUST explain in the recommendation text for "Secondary categories gap analysis" that secondary categories are hidden from standard search snippets and Places API developer fields, and advise the user to verify in their GBP dashboard. Do not report fake category names or generic developer types like 'health' or 'medical_clinic'; instead, report specific, official GMB categories.
 ${hintsText}
 `;
     }
@@ -464,10 +464,11 @@ For the categories "Addiction Treatment Center", "Mental Health Service", and "A
 [END TAXONOMY]
 
 CRITICAL INSTRUCTION: You MUST correctly identify the actual business name from the provided target. Do NOT output "Circle Social" or "Circle Social Inc" as the audited business name.
-CRITICAL INSTRUCTION: When reporting Categories (Primary and Secondary), you MUST ONLY use official Google My Business categories (refer to standard lists such as https://daltonluka.com/blog/google-my-business-categories). DO NOT hallucinate, guess, or make up category titles. Do NOT report generic developer types like 'health', 'point_of_interest', 'medical_clinic', or 'establishment' as categories if a more specific merchant-facing category (e.g., 'Addiction Treatment Center', 'Rehabilitation Center', 'Mental Health Clinic', 'Alcoholism Treatment Program', 'Mental Health Service') is active on the profile. Combine the injected types and Target Category Hints with search grounding to verify the exact category names visible on the business's public Maps profile, and list all that are active.
-CRITICAL INSTRUCTION: When auditing "Secondary categories" for the primary business, you MUST advise the user in the recommendation text to verify their secondary categories (such as 'Alcoholism Treatment Program', 'Mental Health Service', or 'Rehabilitation Center') by logging into their Google Business Profile dashboard. Explain that secondary categories are often hidden or restricted from standard public search snippets and Google Places API developer fields, so verifying them directly inside the GBP dashboard is a critical best practice. Ensure that you never report generic developer types like 'health' or 'medical_clinic' as categories.
+CRITICAL INSTRUCTION: When reporting Categories (Primary and Secondary), you MUST ONLY use and enforce strict matching to official Google My Business categories (like "Addiction Treatment Center", "Alcoholism Treatment Program", "Mental Health Service"). You are strictly prohibited from using fake, fabricated, or informal category names (e.g., "Addiction Recovery Service" or "Detox Center" are NOT official categories). DO NOT hallucinate, guess, or make up category titles. Do NOT report generic developer types like 'health', 'point_of_interest', 'medical_clinic', or 'establishment' as categories if a more specific merchant-facing category (e.g., 'Addiction Treatment Center', 'Rehabilitation Center', 'Mental Health Clinic', 'Alcoholism Treatment Program', 'Mental Health Service') is active on the profile. Combine the injected types and Target Category Hints with search grounding to verify the exact category names visible on the business's public Maps profile, and list all that are active.
+CRITICAL INSTRUCTION: When auditing "Secondary categories" for the primary business, you MUST advise the user in the recommendation text to verify their secondary categories (such as 'Alcoholism Treatment Program', 'Mental Health Service', or 'Rehabilitation Center') by logging into their Google Business Profile dashboard. Explain that secondary categories are often hidden or restricted from standard public search snippets and Google Places API developer fields, so verifying them directly inside the GBP dashboard is a critical best practice. Ensure that you never report fake category names or generic developer types like 'health' or 'medical_clinic' as categories.
+CRITICAL INSTRUCTION: When checking review velocity for both the primary business and each competitor, you MUST enforce numerical velocity estimates for the last 180 days (e.g., "15 reviews in the last 180 days", or "0 reviews in the last 180 days" if none are found). Prohibit generic text or omissions.
 CRITICAL INSTRUCTION: When auditing "Hours vs competitors", you MUST use the injected "EXACT Real Opening Hours" value (when status is success) as the absolute truth for the business hours of the primary business. Specify the exact business hours in the audit text (e.g., "Open 24 hours" or "Monday - Friday: 9 AM - 5 PM").
-CRITICAL INSTRUCTION: When auditing "Google Posts activity", you MUST search for the business's posts using search grounding and specify the date and topic of the most recent post (e.g., "The last post was on June 12th regarding community outreach"). If no posts are found, rate the status as "Missing" and state clearly that there are no posts on the profile.
+CRITICAL INSTRUCTION: When auditing "Google Posts activity", you MUST enforce live grounding searches using search grounding to verify updates, specify the exact date and topic of the most recent post, and you are strictly prohibited from copying placeholder examples (such as "June 12th regarding community outreach") as a fallback or placeholder. If no posts are found, rate the status as "Missing" and state clearly that there are no posts on the profile.
 CRITICAL INSTRUCTION: When auditing "Social Profiles", you MUST run targeted search queries (e.g., searching specifically for "[Business Name] Facebook", "[Business Name] Instagram", "[Business Name] LinkedIn") to verify their existence and active status. Verify if they display on the business's Google Business Profile knowledge panel, and specify exactly which platforms are active or linked.
 CRITICAL INSTRUCTION: When evaluating "Website URL", pay extreme attention to verify if the URL contains a UTM tracking parameter (e.g., "?utm_source=google"). If the URL does not contain UTM parameters, it is a negative finding.
 CRITICAL INSTRUCTION: When evaluating and extracting "Services" for "businessDetails.services", you MUST perform highly targeted search grounding queries (such as "[Business Name] Google Maps services" or "[Business Name] services list") to extract the services list from the public GMB profile/location page.
@@ -476,7 +477,7 @@ You MUST strictly exclude/filter out crawl noise, website-specific programs, or 
 You are strictly prohibited from stripping location names, and you MUST avoid generic guesses, assumptions, or placeholder listings, ensuring a 1:1 match of the actual services list currently offered on the public GMB profile.
 You MUST strictly avoid hallucinating services that are not listed on the public GMB profile.
 You MUST strictly ignore directory sites (such as PsychologyToday, StartYourRecovery, Rehabs.com, etc.) for compiling the businessDetails.services list, focusing strictly on Google My Business / Google Maps search snippet or knowledge panel information.
-CRITICAL INSTRUCTION: You MUST populate the "businessDetails" object in the JSON response containing the primary business's details: "name", "address" (full formatted address), "phone", "websiteUrl" (the exact website URL), "services" (string array containing the mapped services based on the provided taxonomy and location modifiers, e.g., "Drug Rehabilitation in ${detectedCity}" or "Drug Rehabilitation in ${detectedLocation}", while strictly excluding crawl noise and generic therapies like Reiki, Yoga, Art/Music Therapy, Alumni Services, Experiential Therapy, Individual/Group/Family Therapy, and Acupuncture, and ignoring directory sites), and "socials" (string array of active social media profile links found).
+CRITICAL INSTRUCTION: You MUST populate the "businessDetails" object in the JSON response containing the primary business's details: "name", "address" (full formatted address), "phone", "websiteUrl" (the exact website URL), "services" (string array containing the mapped services based on the provided taxonomy and location modifiers, e.g., "Drug Rehabilitation in ${detectedCity}" or "Drug Rehabilitation in ${detectedLocation}", while strictly excluding crawl noise and generic therapies like Reiki, Yoga, Art/Music/Experiential Therapy, Alumni Services, Experiential Therapy, Individual/Group/Family Therapy, and Acupuncture, and ignoring directory sites), "socials" (string array of active social media profile links found), and "servicesSource" (string explaining the sourcing of the services, specifically GMB listing snippets vs website crawl due to snippet limitations).
 
 
 Search Grounding is highly active and encouraged: You MUST search live Google search results, Google Maps, and other public listing sources using search grounding to retrieve the business description, evaluate photos/videos (exterior, interior, team), analyze Google Posts activity, check review replies (reply rate), and find social media links. CRITICAL: For social profiles, you MUST run targeted search queries (e.g., "[Business Name] Facebook", "[Business Name] Instagram", "[Business Name] LinkedIn") using search grounding to verify the business's presence and check if they display in the Google My Business knowledge panel. Perform thorough, in-depth searches to gather real details and write specific, detailed analyses for the primary business and competitors. Avoid writing generic, placeholder, or bland statements.
@@ -486,7 +487,7 @@ Conduct a rigorous audit against the following tiered criteria (Scores sum to 11
 **Tier 1 — Highest impact**
 1. Business name competitive analysis: (Category: Ranking Factor, Weight: 15pts) - Detect keyword stuffing in the name. If competitors are stuffing keywords and the primary business is not, flag it as a risk/disadvantage. State that adding keywords for a ranking boost carries a risk of profile suspension (an informed decision must be made).
 2. Primary category match: (Category: Ranking Factor, Weight: 15pts) - Identify its Primary category. Does it perfectly match what is ranking locally for the service?
-3. Review velocity vs competitors: (Category: Ranking Factor, Weight: 12pts) - Estimate review frequency specifically targeting a 180-day timespan with a numerical estimate (e.g., '15 reviews in the last 180 days'). BE CONSERVATIVE and do not over-estimate or hallucinate exact numbers without evidence. How does their velocity compare to the top competitors?
+3. Review velocity vs competitors: (Category: Ranking Factor, Weight: 12pts) - Enforce numerical review velocity estimates for the last 180 days (e.g., '15 reviews in the last 180 days', or '0 reviews in the last 180 days' if none are found) for both the primary business and each competitor. Prohibit generic text or omissions. BE CONSERVATIVE and do not over-estimate or hallucinate exact numbers without evidence. How does their velocity compare to the top competitors?
 
 **Tier 2 — Strong signals**
 4. Secondary categories gap analysis: (Category: Ranking Factor, Weight: 10pts) - Are they missing critical secondary categories that top ranking competitors use? CRITICAL: DO NOT hallucinate secondary categories if they are not explicitly present. Only list gaps you are certain of.
@@ -530,7 +531,7 @@ Return ONLY a structured JSON object with this exact schema so the frontend can 
       "recommendation": "string (Step-by-step actionable optimization guidance)"
     }
   ],
-  "competitors": [ // Array of exactly the top 3 competitors found for the keyword, or empty array if no serviceLocation was provided
+  "competitors": [ // Array of exactly 10 competitors found for the keyword, or empty array if no serviceLocation was provided
     {
       "name": "string (Exact competitor business name)",
       "estimatedScore": number, // out of 100
@@ -539,7 +540,7 @@ Return ONLY a structured JSON object with this exact schema so the frontend can 
       "keywordsInName": "boolean (true if they are using keywords in their name)",
       "primaryCategory": "string",
       "secondaryCategories": ["string"],
-      "reviewVelocity": "string (Describe their review frequency targeting a 180-day timespan with a numerical estimate, e.g., '15 reviews in the last 180 days')"
+      "reviewVelocity": "string (Describe their review frequency targeting a 180-day timespan with a numerical estimate, e.g., '15 reviews in the last 180 days', or '0 reviews in the last 180 days' if none are found. Prohibit generic text or omissions.)"
     }
   ],
   "businessDetails": {
@@ -548,7 +549,8 @@ Return ONLY a structured JSON object with this exact schema so the frontend can 
     "phone": "string (Exact phone number)",
     "websiteUrl": "string (Exact website URL)",
     "services": ["string (Exact custom services offered from the GMB profile/location page, mapped to the standard GBP taxonomy for Addiction Treatment, Mental Health, and Alcoholism Treatment, and retaining geographic location modifiers, e.g., 'Drug Rehabilitation in ${detectedCity}' or 'Drug Rehabilitation in ${detectedLocation}'. Strictly exclude crawl noise and generic therapies like Reiki, Yoga, Art/Music/Experiential Therapy, Alumni Services, Individual/Group/Family/Couples Therapy, Acupuncture.)"],
-    "socials": ["string (Social media profile links found)"]
+    "socials": ["string (Social media profile links found)"],
+    "servicesSource": "string (Explain the sourcing of the services—specifically GMB listing snippets vs website crawl due to snippet limitations)"
   }
 }`;
 
@@ -616,22 +618,36 @@ Return ONLY a structured JSON object with this exact schema so the frontend can 
             socials: {
               type: Type.ARRAY,
               items: { type: Type.STRING }
-            }
+            },
+            servicesSource: { type: Type.STRING }
           },
-          required: ["name", "address", "phone", "websiteUrl", "services", "socials"]
+          required: ["name", "address", "phone", "websiteUrl", "services", "socials", "servicesSource"]
         }
       },
       required: ["businessName", "overallScore", "summary", "sections", "competitors", "businessDetails"]
     };
-
-    const response = await client.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: prompt,
-      config: {
-        tools: [{ googleSearch: {} }],
-        temperature: 0.2,
-      },
-    });
+    let response;
+    let retries = 3;
+    while (retries > 0) {
+      try {
+        response = await client.models.generateContent({
+          model: "gemini-2.5-flash",
+          contents: prompt,
+          config: {
+            tools: [{ googleSearch: {} }],
+            temperature: 0.2,
+          },
+        });
+        break; // success
+      } catch (err: any) {
+        retries--;
+        console.warn(`Gemini API call failed. Retries remaining: ${retries}. Error:`, err.message || err);
+        if (retries === 0) {
+          throw err;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+      }
+    }
 
     let reportText = "";
     try {
