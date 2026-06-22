@@ -33,6 +33,9 @@ export interface BusinessDetails {
   services: string[];
   socials: string[];
   servicesSource?: string;
+  reviewCount: number;
+  reviewVelocity: string;
+  placeId?: string;
 }
 
 export interface AuditReport {

@@ -10,6 +10,60 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
+async function fetchSocialsFromWebsite(url: string): Promise<string[]> {
+  if (!url || url === "Not provided" || url === "N/A" || !url.startsWith("http")) return [];
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+      },
+      signal: AbortSignal.timeout(5000)
+    });
+    if (!res.ok) return [];
+    const html = await res.text();
+    
+    const socialPatterns = [
+      /https?:\/\/(?:[a-z0-9-]+\.)?facebook\.com\/[a-zA-Z0-9._-]+/gi,
+      /https?:\/\/(?:[a-z0-9-]+\.)?instagram\.com\/[a-zA-Z0-9._-]+/gi,
+      /https?:\/\/(?:[a-z0-9-]+\.)?linkedin\.com\/(?:company|in)\/[a-zA-Z0-9._-]+/gi,
+      /https?:\/\/(?:[a-z0-9-]+\.)?youtube\.com\/(?:@|channel|user)\/[a-zA-Z0-9._-]+/gi,
+      /https?:\/\/(?:[a-z0-9-]+\.)?twitter\.com\/[a-zA-Z0-9._-]+/gi,
+      /https?:\/\/(?:[a-z0-9-]+\.)?x\.com\/[a-zA-Z0-9._-]+/gi,
+      /https?:\/\/(?:[a-z0-9-]+\.)?pinterest\.com\/[a-zA-Z0-9._-]+/gi,
+      /https?:\/\/(?:[a-z0-9-]+\.)?tiktok\.com\/@[a-zA-Z0-9._-]+/gi
+    ];
+    
+    const socials: string[] = [];
+    socialPatterns.forEach(pattern => {
+      const matches = html.match(pattern);
+      if (matches) {
+        matches.forEach(match => {
+          let cleanUrl = match.trim().replace(/\/$/, "");
+          const lower = cleanUrl.toLowerCase();
+          if (
+            lower.includes("facebook.com/sharer") ||
+            lower.includes("facebook.com/share") ||
+            lower.includes("linkedin.com/share") ||
+            lower.includes("twitter.com/share") ||
+            lower.includes("pinterest.com/pin/create") ||
+            lower.endsWith("facebook.com/pages") ||
+            lower.endsWith("facebook.com/groups")
+          ) {
+            return;
+          }
+          if (!socials.includes(cleanUrl)) {
+            socials.push(cleanUrl);
+          }
+        });
+      }
+    });
+    return socials;
+  } catch (err) {
+    console.error("Error fetching socials from website:", err);
+    return [];
+  }
+}
+
 // Helper to safely obtain GoogleGenAI client
 let aiClient: GoogleGenAI | null = null;
 function getGeminiClient() {
@@ -162,6 +216,9 @@ app.post("/api/audit", async (req, res) => {
     }
 
     let detectedLocation = serviceLocation ? serviceLocation.trim() : "";
+    let placeReviewCount: number | string = "Not available from Places API";
+    let placeReviewVelocity = "Not available from Places API";
+    let extractedPlaceId = "";
 
     const client = getGeminiClient();
 
@@ -267,7 +324,7 @@ app.post("/api/audit", async (req, res) => {
             headers: {
               "Content-Type": "application/json",
               "X-Goog-Api-Key": process.env.GOOGLE_MAPS_PLATFORM_KEY,
-              "X-Goog-FieldMask": "places.displayName,places.rating,places.userRatingCount,places.location,places.primaryType,places.primaryTypeDisplayName,places.types,places.formattedAddress,places.websiteUri,places.nationalPhoneNumber,places.regularOpeningHours"
+              "X-Goog-FieldMask": "places.id,places.name,places.displayName,places.rating,places.userRatingCount,places.location,places.primaryType,places.primaryTypeDisplayName,places.types,places.formattedAddress,places.websiteUri,places.nationalPhoneNumber,places.regularOpeningHours,places.reviews"
             },
             body: JSON.stringify(body)
           });
@@ -287,6 +344,38 @@ app.post("/api/audit", async (req, res) => {
                   lng: place.location.longitude
                 };
               }
+
+              if (place.id) {
+                extractedPlaceId = place.id;
+              } else if (place.name && place.name.startsWith("places/")) {
+                extractedPlaceId = place.name.substring("places/".length);
+              }
+
+              let crawledSocials: string[] = [];
+              if (place.websiteUri) {
+                try {
+                  crawledSocials = await fetchSocialsFromWebsite(place.websiteUri);
+                } catch (e) {
+                  console.error("Failed to crawl website socials:", e);
+                }
+              }
+
+              const reviews = place.reviews || [];
+              const now = new Date();
+              const hundredEightyDaysAgo = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
+              let reviewsInLast180Days = 0;
+              reviews.forEach((r: any) => {
+                if (r.publishTime) {
+                  const pubDate = new Date(r.publishTime);
+                  if (pubDate >= hundredEightyDaysAgo) {
+                    reviewsInLast180Days++;
+                  }
+                }
+              });
+              const calculatedVelocity = `${reviewsInLast180Days} reviews in the last 180 days`;
+              placeReviewCount = place.userRatingCount || 0;
+              placeReviewVelocity = calculatedVelocity;
+
               const formattedCats = getFormattedCategories(place);
               const categoryHints = getCategoryHints(finalBusinessName, googleMapsQuery);
               const hoursText = place.regularOpeningHours?.weekdayDescriptions
@@ -302,6 +391,9 @@ The following data was fetched LIVE from the Google Maps Places API. You MUST tr
 - Website URL: ${place.websiteUri || "Not provided"}
 - Phone Number: ${place.nationalPhoneNumber || "Not provided"}
 - EXACT Real Opening Hours: ${hoursText}
+- Real Review Velocity Baseline (from Place API recent reviews): ${calculatedVelocity} (Verify and refine this using search grounding if needed)
+- Place ID: ${extractedPlaceId || "Unknown"}
+- Website Social Profiles Found on Homepage Crawl: ${crawledSocials.join(", ") || "None"} (Use these profiles as baseline active socials, check if they are linked or displaying correctly on the business's public GMB listing, and check for any other active socials).
 
 [GOOGLE PLACES API CATEGORIES - REFERENCE ONLY]
 The following categories are broad, developer-facing Google Places API types. They are NOT the specific merchant-facing Google Business Profile categories. You MUST use Search Grounding to verify and override these with the actual merchant-facing categories from the business's public listing:
@@ -353,7 +445,7 @@ The following categories are broad, developer-facing Google Places API types. Th
           headers: {
             "Content-Type": "application/json",
             "X-Goog-Api-Key": process.env.GOOGLE_MAPS_PLATFORM_KEY,
-            "X-Goog-FieldMask": "places.displayName,places.rating,places.userRatingCount,places.primaryType,places.primaryTypeDisplayName,places.types,places.formattedAddress"
+            "X-Goog-FieldMask": "places.id,places.name,places.displayName,places.rating,places.userRatingCount,places.primaryType,places.primaryTypeDisplayName,places.types,places.formattedAddress"
           },
           body: JSON.stringify(compBody)
         });
@@ -389,7 +481,7 @@ ${compText}
     }
 
     const competitorPrompt = serviceLocation 
-      ? `\nAdditionally, use the provided Service & City keyword ("${serviceLocation}") to identify the real, live top 10 ranking competitors in the local search results on Google Maps. CRITICAL: DO NOT HALLUCINATE COMPETITORS. Only use real businesses that actually exist and rank for this keyword. Compare them against the primary business and provide your analysis in the "competitors" JSON array (which MUST contain up to 10 competitors based on the injected list of competitors). Pay special attention to these local ranking factors:
+      ? `\nAdditionally, use the provided Service & City keyword ("${serviceLocation}") to identify the real, live top 10 ranking competitors in the local search results on Google Maps. CRITICAL: DO NOT HALLUCINATE COMPETITORS. Only use real businesses that actually exist and rank for this keyword. Compare them against the primary business and provide your analysis in the "competitors" JSON array. CRITICAL: You MUST return exactly 10 competitors in the "competitors" array without any truncation, omitting none, and ensuring exactly 10 items are populated in the JSON output. Pay special attention to these local ranking factors:
 1. Business Name: Are they adding keywords into their actual name? (Keyword stuffing in the title). If competitors are doing it, it's a massive ranking factor and the primary business is at a disadvantage. Adding keywords to the primary business name for parity would be a ranking boost, but could lead to profile suspension. This must be presented as an informed decision.
 2. Categories: What is their primary category? CRITICAL: Be extremely accurate with secondary categories. DO NOT guess or hallucinate secondary categories. Only list secondary categories you have hard evidence for. Enforce strict matching to official Google My Business categories (such as "Addiction Treatment Center", "Alcoholism Treatment Program", "Mental Health Service") and prohibit fake category names.
 3. Review Velocity: Enforce a numerical velocity estimate specifically targeting a 180-day timespan (e.g., '15 reviews in the last 180 days', or '0 reviews in the last 180 days' if none are found) for each competitor. Prohibit generic text or omissions. BE CONSERVATIVE and do not over-estimate or hallucinate review counts. State the EXACT, TRUE review count for these competitors.` 
@@ -400,14 +492,14 @@ ${compText}
       sourceSpecificInstructions = `
 CRITICAL INTEGRITY INSTRUCTION:
 1. For reviews and ratings, you MUST use the exact numbers provided in the [CRITICAL GOOGLE PLACES API REAL-TIME DATA INJECTION] section (e.g. EXACT Real Total Review Count and EXACT Real Star Rating). Do NOT search the web to override or change these two numbers.
-2. For Website URL, Phone Number, and Formatted Address, use the exact values from the Places API injection. However, for the UTM parameter audit, you MUST use Search Grounding to check the live Google Maps profile's website button link. Do not assume the injection URL represents the live button's link. Check if the live button link contains UTM parameters (e.g., "?utm_source=google").
+2. For Website URL, Phone Number, and Formatted Address, use the values from the Places API injection. However, please explain in your audit that the Google Places API \`websiteUri\` lacks UTM parameters. You MUST use Search Grounding to check the live Google Maps profile's website button link (e.g., "?utm_source=google" or "?utm_source=gmb" or similar) for UTM tracking parameters. This audit MUST be highly accurate based on actual website button link checks.
 3. For Categories (Primary and Secondary), you MUST use the injected "Primary Category (Mapped Place Type)" and "Associated Secondary Categories (Mapped Place Types)" as the baseline categories for the business, as these have been verified and mapped to official merchant-facing GMB categories. You may use search grounding to find additional details, but if they cannot be verified, you MUST explain in the recommendation text for "Secondary categories gap analysis" that secondary categories are hidden from standard search snippets and Places API developer fields, and advise the user to verify in their GBP dashboard. Ensure that you never report fake category names or generic developer types like 'health' or 'medical_clinic' as categories; strictly enforce official GMB categories.
 `;
     } else {
       const categoryHints = getCategoryHints(finalBusinessName, googleMapsQuery);
       const hintsText = categoryHints.length > 0 ? `Target Category Hints (Based on Business/Query Keywords): ${categoryHints.join(", ")}` : "";
       sourceSpecificInstructions = `
-CRITICAL SEARCH GROUNDING INSTRUCTION: Google Places API real-time data is NOT available (status: ${placesApiStatus}). You MUST use Search Grounding to locate the exact business profile on Google Search and Google Maps. Search Grounding often returns heavily cached, outdated, or mixed-source review numbers. You MUST prioritize the HIGHEST Google Review count you can confidently verify from recent search snippets, and avoid including Yelp or Facebook review counts. For the Website URL, use search grounding to find the URL linked to the Google Business Profile website button and check if it contains a UTM tracking parameter (e.g., "?utm_source=google").
+CRITICAL SEARCH GROUNDING INSTRUCTION: Google Places API real-time data is NOT available (status: ${placesApiStatus}). You MUST use Search Grounding to locate the exact business profile on Google Search and Google Maps. Search Grounding often returns heavily cached, outdated, or mixed-source review numbers. You MUST prioritize the HIGHEST Google Review count you can confidently verify from recent search snippets, and avoid including Yelp or Facebook review counts. For the Website URL, use search grounding to check the live Google Maps profile's website button link and check if it contains a UTM tracking parameter (e.g., "?utm_source=google" or "?utm_source=gmb" or similar). Explain that Google Places API \`websiteUri\` lacks UTM parameters and you must check the live Maps profile's website button link using Search Grounding. This check MUST be highly accurate based on the actual website button link.
 For Categories (Primary and Secondary), you MUST use the provided "Target Category Hints" as baseline search candidates. You may use search grounding to find additional details, but if they cannot be verified, you MUST explain in the recommendation text for "Secondary categories gap analysis" that secondary categories are hidden from standard search snippets and Places API developer fields, and advise the user to verify in their GBP dashboard. Do not report fake category names or generic developer types like 'health' or 'medical_clinic'; instead, report specific, official GMB categories.
 ${hintsText}
 `;
@@ -423,6 +515,11 @@ Your goal is to analyze the following target: ${searchTarget}.
 ${placesApiContext}
 ${competitorApiContext}
 ${competitorPrompt}
+
+[PRIMARY BUSINESS KEY METRICS]
+- Review Count: ${placeReviewCount}
+- Review Velocity: ${placeReviewVelocity}
+CRITICAL: You MUST use the injected Review Count and Review Velocity if they are available (not "Not available from Places API"). If they are "Not available from Places API", you MUST use search grounding to locate the business listing, retrieve the exact review count, and calculate the review velocity (number of reviews in the last 180 days) for the primary business. You MUST return these exact metrics in the "businessDetails" JSON object under "reviewCount" and "reviewVelocity" (reviewCount must be an integer, reviewVelocity must be a string like 'X reviews in the last 180 days').
 
 ${sourceSpecificInstructions}
 
@@ -469,15 +566,15 @@ CRITICAL INSTRUCTION: When auditing "Secondary categories" for the primary busin
 CRITICAL INSTRUCTION: When checking review velocity for both the primary business and each competitor, you MUST enforce numerical velocity estimates for the last 180 days (e.g., "15 reviews in the last 180 days", or "0 reviews in the last 180 days" if none are found). Prohibit generic text or omissions.
 CRITICAL INSTRUCTION: When auditing "Hours vs competitors", you MUST use the injected "EXACT Real Opening Hours" value (when status is success) as the absolute truth for the business hours of the primary business. Specify the exact business hours in the audit text (e.g., "Open 24 hours" or "Monday - Friday: 9 AM - 5 PM").
 CRITICAL INSTRUCTION: When auditing "Google Posts activity", you MUST enforce live grounding searches using search grounding to verify updates, specify the exact date and topic of the most recent post, and you are strictly prohibited from copying placeholder examples (such as "June 12th regarding community outreach") as a fallback or placeholder. If no posts are found, rate the status as "Missing" and state clearly that there are no posts on the profile.
-CRITICAL INSTRUCTION: When auditing "Social Profiles", you MUST run targeted search queries (e.g., searching specifically for "[Business Name] Facebook", "[Business Name] Instagram", "[Business Name] LinkedIn") to verify their existence and active status. Verify if they display on the business's Google Business Profile knowledge panel, and specify exactly which platforms are active or linked.
-CRITICAL INSTRUCTION: When evaluating "Website URL", pay extreme attention to verify if the URL contains a UTM tracking parameter (e.g., "?utm_source=google"). If the URL does not contain UTM parameters, it is a negative finding.
+CRITICAL INSTRUCTION: When auditing "Social Profiles", you MUST check the business's public GMB listing, confirm which social profiles are active (by running targeted search queries e.g., searching specifically for "[Business Name] Facebook", "[Business Name] Instagram", "[Business Name] LinkedIn", etc. to verify their active status), explicitly state if they display in the GMB listing, and explicitly list which of the major 7 socials (Facebook, Instagram, YouTube, LinkedIn, TikTok, Twitter/X, Pinterest) are missing from the listing.
+CRITICAL INSTRUCTION: When evaluating "Website URL", you MUST perform a highly accurate search grounding check specifically on the live Google Maps profile's website button link to see if it contains UTM tracking parameters (e.g., "?utm_source=google" or "?utm_source=gmb" or similar). Explain that Google Places API \`websiteUri\` lacks UTM parameters and you must check the live Maps profile's website button link using Search Grounding. Do NOT just guess or check the root domain; you must verify the exact target URL of the website button on the live listing. If the website button link does not contain any UTM parameters, you MUST mark this as a negative finding (Needs Improvement or Missing) and recommend adding UTM parameters.
 CRITICAL INSTRUCTION: When evaluating and extracting "Services" for "businessDetails.services", you MUST perform highly targeted search grounding queries (such as "[Business Name] Google Maps services" or "[Business Name] services list") to extract the services list from the public GMB profile/location page.
 If the active categories for the business include "Addiction Treatment Center", "Mental Health Service", or "Alcoholism Treatment Program", you MUST strictly map search findings to the provided [STANDARD GBP SERVICES REFERENCE TAXONOMY] and append the dynamic location modifier (either "in ${detectedCity}" or "in ${detectedLocation}"). For example, if the audited business is in ${detectedLocation}, the retrieved services must match the exact naming convention including the suffix (e.g., "Drug Rehabilitation in ${detectedCity}" or "Drug Rehabilitation in ${detectedLocation}").
 You MUST strictly exclude/filter out crawl noise, website-specific programs, or generic therapies (such as Reiki, Yoga, Art Therapy, Music Therapy, Alumni Services, Experiential Therapy, Individual/Group/Family/Couples Therapy, Acupuncture, etc.). Only standard predefined services from the taxonomy with the location modifier should be included for these categories.
 You are strictly prohibited from stripping location names, and you MUST avoid generic guesses, assumptions, or placeholder listings, ensuring a 1:1 match of the actual services list currently offered on the public GMB profile.
 You MUST strictly avoid hallucinating services that are not listed on the public GMB profile.
 You MUST strictly ignore directory sites (such as PsychologyToday, StartYourRecovery, Rehabs.com, etc.) for compiling the businessDetails.services list, focusing strictly on Google My Business / Google Maps search snippet or knowledge panel information.
-CRITICAL INSTRUCTION: You MUST populate the "businessDetails" object in the JSON response containing the primary business's details: "name", "address" (full formatted address), "phone", "websiteUrl" (the exact website URL), "services" (string array containing the mapped services based on the provided taxonomy and location modifiers, e.g., "Drug Rehabilitation in ${detectedCity}" or "Drug Rehabilitation in ${detectedLocation}", while strictly excluding crawl noise and generic therapies like Reiki, Yoga, Art/Music/Experiential Therapy, Alumni Services, Experiential Therapy, Individual/Group/Family Therapy, and Acupuncture, and ignoring directory sites), "socials" (string array of active social media profile links found), and "servicesSource" (string explaining the sourcing of the services, specifically GMB listing snippets vs website crawl due to snippet limitations).
+CRITICAL INSTRUCTION: You MUST populate the "businessDetails" object in the JSON response containing the primary business's details: "name", "address" (full formatted address), "phone", "websiteUrl" (the exact website URL), "reviewCount" (the total number of reviews, which must be a number), "reviewVelocity" (a numerical velocity string targeting the last 180 days, e.g., '12 reviews in the last 180 days'), "services" (string array containing the mapped services based on the provided taxonomy and location modifiers, e.g., "Drug Rehabilitation in ${detectedCity}" or "Drug Rehabilitation in ${detectedLocation}", while strictly excluding crawl noise and generic therapies like Reiki, Yoga, Art/Music/Experiential Therapy, Alumni Services, Experiential Therapy, Individual/Group/Family Therapy, and Acupuncture, and ignoring directory sites), "socials" (string array of active social media profile links found), and "servicesSource" (string explaining the sourcing of the services, specifically GMB listing snippets vs website crawl due to snippet limitations).
 
 
 Search Grounding is highly active and encouraged: You MUST search live Google search results, Google Maps, and other public listing sources using search grounding to retrieve the business description, evaluate photos/videos (exterior, interior, team), analyze Google Posts activity, check review replies (reply rate), and find social media links. CRITICAL: For social profiles, you MUST run targeted search queries (e.g., "[Business Name] Facebook", "[Business Name] Instagram", "[Business Name] LinkedIn") using search grounding to verify the business's presence and check if they display in the Google My Business knowledge panel. Perform thorough, in-depth searches to gather real details and write specific, detailed analyses for the primary business and competitors. Avoid writing generic, placeholder, or bland statements.
@@ -499,15 +596,15 @@ Conduct a rigorous audit against the following tiered criteria (Scores sum to 11
 8. Review quantity & recency: (Category: Ranking Factor, Weight: 6pts) - Total volume and how fresh the latest reviews are.
 9. Review reply rate: (Category: Best Practice, Weight: 6pts) - Are they replying to reviews, especially negative ones?
 10. Hours vs competitors: (Category: Best Practice, Weight: 5pts) - Are their hours competitive?
-11. Website URL: (Category: Ranking Factor, Weight: 4pts) - Is the website linked? CRITICAL: Check specifically if the Website link utilizes a UTM tracking parameter (e.g., ?utm_source=google... on the main website button). Having no UTM parameters on the website button is a penalty.
+11. Website URL: (Category: Best Practice, Weight: 4pts) - Is the website linked? CRITICAL: Check specifically if the live Google Maps profile's website button link utilizes a UTM tracking parameter (e.g., ?utm_source=google... on the main website button). Google Places API \`websiteUri\` lacks UTM parameters, so you must check the live Maps profile's website button link using Search Grounding. Having no UTM parameters on the website button is a penalty.
 12. Phone number: (Category: Best Practice, Weight: 4pts) - Clarity and consistency.
-13. Address & service area: (Category: Ranking Factor, Weight: 4pts) - NAP consistency and valid service areas.
+13. Address & service area: (Category: Best Practice, Weight: 4pts) - NAP consistency and valid service areas.
 
 **Tier 4 — Completeness / Risk flags**
 14. Google Posts activity: (Category: Best Practice, Weight: 3pts) - Activity within the last 7-30 days.
 15. Products (Risk flag): (Category: Best Practice, Weight: 3pts) - Note: For treatment centers, Products shouldn't really be used. If they are used, note it as a detriment and flag that they should be removed. (If not used, give 3 pts).
 16. Attributes & highlights: (Category: Best Practice, Weight: 3pts) - Use of relevant attributes (e.g., wheelchair accessible, amenities).
-17. Social Profiles: (Category: Best Practice, Weight: 4pts) - Check if major social media profiles (Facebook, Instagram, YouTube, Twitter/X, LinkedIn, TikTok, etc.) are linked and displaying correctly on the Google Business Profile knowledge panel.
+17. Social Profiles: (Category: Best Practice, Weight: 4pts) - Check the GMB listing, confirm active ones, and check if major social media profiles are linked and displaying correctly on the Google My Business knowledge panel. You MUST explicitly state if they display in the GMB listing, and you MUST explicitly list which of the major 7 socials (Facebook, Instagram, YouTube, LinkedIn, TikTok, Twitter/X, Pinterest) are missing from the listing.
 
 Be educational, extremely professional, realistic, and highly encouraging. Write of actionable items the business owner can take today.
 If you cannot find exact details for specific attributes because they are hidden or the business lacks them, rate them objectively as "Improvement needed" or "Missing" and offer clear constructive advice. Do not synthesize unrealistic content.
@@ -531,7 +628,7 @@ Return ONLY a structured JSON object with this exact schema so the frontend can 
       "recommendation": "string (Step-by-step actionable optimization guidance)"
     }
   ],
-  "competitors": [ // Array of exactly 10 competitors found for the keyword, or empty array if no serviceLocation was provided
+  "competitors": [ // Array of EXACTLY 10 competitors found for the keyword. You MUST return exactly 10 competitors in this array, without truncation, omitting none, and ensuring exactly 10 items are populated in the JSON output, or an empty array if no serviceLocation was provided.
     {
       "name": "string (Exact competitor business name)",
       "estimatedScore": number, // out of 100
@@ -548,9 +645,12 @@ Return ONLY a structured JSON object with this exact schema so the frontend can 
     "address": "string (Exact formatted address)",
     "phone": "string (Exact phone number)",
     "websiteUrl": "string (Exact website URL)",
+    "reviewCount": number, // Total review count from Google Places API or search grounding
+    "reviewVelocity": "string (Numerical velocity estimate, e.g., '12 reviews in the last 180 days')",
     "services": ["string (Exact custom services offered from the GMB profile/location page, mapped to the standard GBP taxonomy for Addiction Treatment, Mental Health, and Alcoholism Treatment, and retaining geographic location modifiers, e.g., 'Drug Rehabilitation in ${detectedCity}' or 'Drug Rehabilitation in ${detectedLocation}'. Strictly exclude crawl noise and generic therapies like Reiki, Yoga, Art/Music/Experiential Therapy, Alumni Services, Individual/Group/Family/Couples Therapy, Acupuncture.)"],
     "socials": ["string (Social media profile links found)"],
-    "servicesSource": "string (Explain the sourcing of the services—specifically GMB listing snippets vs website crawl due to snippet limitations)"
+    "servicesSource": "string (Explain the sourcing of the services—specifically GMB listing snippets vs website crawl due to snippet limitations)",
+    "placeId": "string (The verified Google Maps Place ID)"
   }
 }`;
 
@@ -585,6 +685,7 @@ Return ONLY a structured JSON object with this exact schema so the frontend can 
         },
         competitors: {
           type: Type.ARRAY,
+          description: "Array of exactly 10 competitors found for the keyword. You MUST return exactly 10 competitors in this array without truncation, omitting none, and ensuring exactly 10 items are populated in the JSON output.",
           items: {
             type: Type.OBJECT,
             properties: {
@@ -610,6 +711,8 @@ Return ONLY a structured JSON object with this exact schema so the frontend can 
             address: { type: Type.STRING },
             phone: { type: Type.STRING },
             websiteUrl: { type: Type.STRING },
+            reviewCount: { type: Type.INTEGER },
+            reviewVelocity: { type: Type.STRING },
             services: {
               type: Type.ARRAY,
               items: { type: Type.STRING },
@@ -619,15 +722,16 @@ Return ONLY a structured JSON object with this exact schema so the frontend can 
               type: Type.ARRAY,
               items: { type: Type.STRING }
             },
-            servicesSource: { type: Type.STRING }
+            servicesSource: { type: Type.STRING },
+            placeId: { type: Type.STRING }
           },
-          required: ["name", "address", "phone", "websiteUrl", "services", "socials", "servicesSource"]
+          required: ["name", "address", "phone", "websiteUrl", "reviewCount", "reviewVelocity", "services", "socials", "servicesSource"]
         }
       },
       required: ["businessName", "overallScore", "summary", "sections", "competitors", "businessDetails"]
     };
     let response;
-    let retries = 3;
+    let retries = 5;
     while (retries > 0) {
       try {
         response = await client.models.generateContent({
@@ -645,7 +749,9 @@ Return ONLY a structured JSON object with this exact schema so the frontend can 
         if (retries === 0) {
           throw err;
         }
-        await new Promise((resolve) => setTimeout(resolve, 3000));
+        // Exponential backoff or simple increasing delay to allow rate limits to clear
+        const delay = (5 - retries) * 4000; 
+        await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
 
@@ -682,6 +788,37 @@ Return ONLY a structured JSON object with this exact schema so the frontend can 
       }
       
       reportData = JSON.parse(cleanText);
+
+      // Ensure businessDetails contains correct real-time data from Places API
+      if (reportData.businessDetails) {
+        if (!reportData.businessDetails.placeId && extractedPlaceId) {
+          reportData.businessDetails.placeId = extractedPlaceId;
+        }
+        if (typeof placeReviewCount === "number" && (reportData.businessDetails.reviewCount === undefined || reportData.businessDetails.reviewCount === 0 || typeof reportData.businessDetails.reviewCount !== "number")) {
+          reportData.businessDetails.reviewCount = placeReviewCount;
+        }
+        if (placeReviewVelocity && placeReviewVelocity !== "Not available from Places API" && (!reportData.businessDetails.reviewVelocity || reportData.businessDetails.reviewVelocity.includes("Not available"))) {
+          reportData.businessDetails.reviewVelocity = placeReviewVelocity;
+        }
+      }
+
+      // Post-process reportData.sections to override categories containing "website", "address", "service area", or "nap" to "Best Practice"
+      if (reportData.sections && Array.isArray(reportData.sections)) {
+        reportData.sections = reportData.sections.map((sec: any) => {
+          if (sec && sec.title) {
+            const titleLower = sec.title.toLowerCase();
+            if (
+              titleLower.includes("website") ||
+              titleLower.includes("address") ||
+              titleLower.includes("service area") ||
+              titleLower.includes("nap")
+            ) {
+              sec.category = "Best Practice";
+            }
+          }
+          return sec;
+        });
+      }
       
       // Post-processing fallback to ensure the required secondary categories explanation is present
       const secondaryCatSec = reportData.sections.find((s: any) => 

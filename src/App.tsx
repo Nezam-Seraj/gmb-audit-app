@@ -35,6 +35,17 @@ import {
 import { AuditReport, SavedAudit, GroundingSource, AuditSection } from "./types";
 import { LocationMap } from "./components/LocationMap";
 
+const getDomain = (url?: string) => {
+  if (!url) return "";
+  try {
+    const cleanUrl = url.startsWith("http") ? url : `http://${url}`;
+    const parsed = new URL(cleanUrl);
+    return parsed.hostname.replace(/^www\./, "");
+  } catch (e) {
+    return url;
+  }
+};
+
 export default function App() {
   // Input fields
   const [url, setUrl] = useState("");
@@ -458,6 +469,14 @@ export default function App() {
                   )}
                 </div>
                 <div>
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Review Count</span>
+                  <span className="text-slate-700">{report.businessDetails.reviewCount !== undefined ? report.businessDetails.reviewCount : "N/A"}</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Review Velocity (180 days)</span>
+                  <span className="text-slate-700">{report.businessDetails.reviewVelocity || "N/A"}</span>
+                </div>
+                <div>
                   <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Services</span>
                   {report.businessDetails.services && report.businessDetails.services.length > 0 ? (
                     <>
@@ -492,6 +511,93 @@ export default function App() {
                     <span className="text-slate-700">None detected</span>
                   )}
                 </div>
+                <div className="pt-2 border-t border-slate-100 space-y-2">
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono">Maps & SEO Utility Links</span>
+                  
+                  {/* Google Maps Links */}
+                  <div className="bg-slate-50 p-2 rounded-lg border border-slate-200/50 space-y-1">
+                    <span className="block text-[9px] font-bold text-slate-500 uppercase tracking-wide">Google Maps</span>
+                    <div className="flex flex-col gap-1.5 text-[11px] font-medium">
+                      {report.businessDetails.placeId ? (
+                        <>
+                          <a href={`https://search.google.com/local/reviews?placeid=${report.businessDetails.placeId}`} target="_blank" rel="noopener noreferrer" className="text-teal-600 hover:underline flex items-center gap-1">
+                            <ExternalLink className="h-3 w-3 inline shrink-0" />
+                            <span>Review List Display Link</span>
+                          </a>
+                          <a href={`https://search.google.com/local/writereview?placeid=${report.businessDetails.placeId}`} target="_blank" rel="noopener noreferrer" className="text-teal-600 hover:underline flex items-center gap-1">
+                            <ExternalLink className="h-3 w-3 inline shrink-0" />
+                            <span>Review Request Link</span>
+                          </a>
+                          <a href={`https://www.google.com/maps/place/?q=place_id:${report.businessDetails.placeId}`} target="_blank" rel="noopener noreferrer" className="text-teal-600 hover:underline flex items-center gap-1">
+                            <ExternalLink className="h-3 w-3 inline shrink-0" />
+                            <span>GMB Link with Place ID</span>
+                          </a>
+                        </>
+                      ) : (
+                        <span className="text-slate-400 italic">No Place ID found to build Maps links.</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Directories search */}
+                  <div className="bg-slate-50 p-2 rounded-lg border border-slate-200/50 space-y-1">
+                    <span className="block text-[9px] font-bold text-slate-500 uppercase tracking-wide">External Directories</span>
+                    <div className="flex flex-col gap-1.5 text-[11px] font-medium">
+                      <a href={`https://www.facebook.com/search/places/?q=${encodeURIComponent(report.businessDetails.name)}`} target="_blank" rel="noopener noreferrer" className="text-teal-600 hover:underline flex items-center gap-1">
+                        <ExternalLink className="h-3 w-3 inline shrink-0" />
+                        <span>Facebook Places Search</span>
+                      </a>
+                      <a href={`https://www.yelp.com/search?find_desc=${encodeURIComponent(report.businessDetails.name)}`} target="_blank" rel="noopener noreferrer" className="text-teal-600 hover:underline flex items-center gap-1">
+                        <ExternalLink className="h-3 w-3 inline shrink-0" />
+                        <span>Yelp Business Search</span>
+                      </a>
+                    </div>
+                  </div>
+
+                  {/* SEO & Technical Tools */}
+                  {report.businessDetails.websiteUrl && report.businessDetails.websiteUrl !== "Not provided" && report.businessDetails.websiteUrl !== "N/A" && (
+                    <div className="bg-slate-50 p-2 rounded-lg border border-slate-200/50 space-y-1">
+                      <span className="block text-[9px] font-bold text-slate-500 uppercase tracking-wide">SEO & Technical Tools</span>
+                      <div className="flex flex-col gap-1.5 text-[11px] font-medium">
+                        <a href={`https://developers.google.com/speed/pagespeed/insights/?url=${encodeURIComponent(report.businessDetails.websiteUrl)}`} target="_blank" rel="noopener noreferrer" className="text-teal-600 hover:underline flex items-center gap-1">
+                          <ExternalLink className="h-3 w-3 inline shrink-0" />
+                          <span>Google PageSpeed Insights</span>
+                        </a>
+                        <a href={`https://search.google.com/test/rich-results?url=${encodeURIComponent(report.businessDetails.websiteUrl)}`} target="_blank" rel="noopener noreferrer" className="text-teal-600 hover:underline flex items-center gap-1">
+                          <ExternalLink className="h-3 w-3 inline shrink-0" />
+                          <span>Rich Results Schema Tester</span>
+                        </a>
+                        <a href={`${report.businessDetails.websiteUrl.replace(/\/$/, "")}/robots.txt`} target="_blank" rel="noopener noreferrer" className="text-teal-600 hover:underline flex items-center gap-1">
+                          <ExternalLink className="h-3 w-3 inline shrink-0" />
+                          <span>Robots.txt File</span>
+                        </a>
+                        <a href={`${report.businessDetails.websiteUrl.replace(/\/$/, "")}/sitemap.xml`} target="_blank" rel="noopener noreferrer" className="text-teal-600 hover:underline flex items-center gap-1">
+                          <ExternalLink className="h-3 w-3 inline shrink-0" />
+                          <span>Sitemap.xml File</span>
+                        </a>
+                        {(() => {
+                          const domain = getDomain(report.businessDetails.websiteUrl);
+                          return domain ? (
+                            <>
+                              <a href={`https://builtwith.com/${domain}`} target="_blank" rel="noopener noreferrer" className="text-teal-600 hover:underline flex items-center gap-1">
+                                <ExternalLink className="h-3 w-3 inline shrink-0" />
+                                <span>BuiltWith Tech Profile</span>
+                              </a>
+                              <a href={`https://whois.domaintools.com/${domain}`} target="_blank" rel="noopener noreferrer" className="text-teal-600 hover:underline flex items-center gap-1">
+                                <ExternalLink className="h-3 w-3 inline shrink-0" />
+                                <span>Domain WHOIS Lookup</span>
+                              </a>
+                              <a href={`https://web.archive.org/web/*/${report.businessDetails.websiteUrl}`} target="_blank" rel="noopener noreferrer" className="text-teal-600 hover:underline flex items-center gap-1">
+                                <ExternalLink className="h-3 w-3 inline shrink-0" />
+                                <span>Wayback Machine History</span>
+                              </a>
+                            </>
+                          ) : null;
+                        })()}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           ) : (
@@ -509,7 +615,7 @@ export default function App() {
               </div>
               
               <p className="text-xs text-slate-500 leading-relaxed italic">
-                Run an audit to view live GBP profile details including Name, Address, Phone, Website, Services, and Social links.
+                Run an audit to view live GBP profile details including Name, Address, Phone, Website, Review Count, Review Velocity, Services, and Social links.
               </p>
             </div>
           )}
@@ -864,8 +970,40 @@ export default function App() {
                 </div>
 
                 {(() => {
-                  const rankingSections = report.sections.filter(s => s.category === "Ranking Factor" || !s.category);
-                  const bestPracticeSections = report.sections.filter(s => s.category === "Best Practice");
+                  const mappedSections = report.sections.map(s => {
+                    const titleLower = s.title.toLowerCase();
+                    if (
+                      titleLower.includes("website") ||
+                      titleLower.includes("address") ||
+                      titleLower.includes("service area") ||
+                      titleLower.includes("nap")
+                    ) {
+                      return { ...s, category: "Best Practice" as const };
+                    }
+                    return s;
+                  });
+
+                  const rankingSections = mappedSections.filter(s => s.category === "Ranking Factor" || !s.category);
+                  const bestPracticeSections = mappedSections.filter(s => s.category === "Best Practice");
+                  
+                  bestPracticeSections.sort((a, b) => {
+                    const aTitle = a.title.toLowerCase();
+                    const bTitle = b.title.toLowerCase();
+                    
+                    const getRank = (title: string) => {
+                      if (title.includes("website")) return 1;
+                      if (title.includes("address") || title.includes("service area") || title.includes("nap")) return 2;
+                      return 3;
+                    };
+                    
+                    const rankA = getRank(aTitle);
+                    const rankB = getRank(bTitle);
+                    
+                    if (rankA !== rankB) {
+                      return rankA - rankB;
+                    }
+                    return a.title.localeCompare(b.title);
+                  });
 
                   const renderSectionAccordion = (section: AuditSection, idx: number) => {
                     const isExpanded = expandedSection === section.title || isExporting;

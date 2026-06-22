@@ -36,14 +36,11 @@ async function testLocation(businessName, serviceLocation) {
     // 1. Competitors checks
     const competitors = data.report.competitors || [];
     console.log(`Competitors count returned: ${competitors.length}`);
-    if (competitors.length === 0) {
-      console.error("[FAIL] No competitors returned!");
-      allPassed = false;
-    } else if (competitors.length > 10) {
-      console.error(`[FAIL] Returned too many competitors: ${competitors.length} (max 10)`);
+    if (competitors.length !== 10) {
+      console.error(`[FAIL] Returned ${competitors.length} competitors (expected exactly 10)!`);
       allPassed = false;
     } else {
-      console.log(`[PASS] Returned a realistic count of competitors (${competitors.length}).`);
+      console.log("[PASS] Returned exactly 10 competitors.");
     }
     
     // 2. Strict category matching and velocity check for competitors
@@ -162,6 +159,96 @@ async function testLocation(businessName, serviceLocation) {
       allPassed = false;
     } else {
       console.log("[PASS] servicesSource is populated.");
+    }
+
+    // Check businessDetails.reviewCount
+    console.log("\nChecking Business Details Review Count...");
+    const reviewCount = data.report.businessDetails?.reviewCount;
+    console.log(`Business Details Review Count: ${reviewCount}`);
+    if (typeof reviewCount !== "number" || isNaN(reviewCount)) {
+      console.error("[FAIL] businessDetails.reviewCount is missing or not a valid number!");
+      allPassed = false;
+    } else {
+      console.log("[PASS] businessDetails.reviewCount contains a valid number.");
+    }
+
+    // Check businessDetails.reviewVelocity
+    console.log("\nChecking Business Details Review Velocity...");
+    const reviewVelocity = data.report.businessDetails?.reviewVelocity || "";
+    console.log(`Business Details Review Velocity: "${reviewVelocity}"`);
+    const hasVelocityNumber = /\d+/.test(reviewVelocity);
+    if (!reviewVelocity || !hasVelocityNumber) {
+      console.error("[FAIL] businessDetails.reviewVelocity is missing or does not contain a numerical velocity estimate!");
+      allPassed = false;
+    } else {
+      console.log("[PASS] businessDetails.reviewVelocity contains a valid numerical velocity string.");
+    }
+ 
+    // Check businessDetails.placeId
+    console.log("\nChecking Business Details Place ID...");
+    const placeId = data.report.businessDetails?.placeId || "";
+    console.log(`Business Details Place ID: "${placeId}"`);
+    if (!placeId) {
+      console.error("[FAIL] businessDetails.placeId is missing or empty!");
+      allPassed = false;
+    } else {
+      console.log("[PASS] businessDetails.placeId contains a valid Google Place ID.");
+    }
+
+    // Check categories of specific sections
+    console.log("\nChecking Section Categories...");
+    const sections = data.report.sections || [];
+    const websiteUrlSection = sections.find(s => s.title.toLowerCase().includes("website url"));
+    const addressSection = sections.find(s => s.title.toLowerCase().includes("address"));
+    
+    if (!websiteUrlSection) {
+      console.error("[FAIL] Website URL section not found!");
+      allPassed = false;
+    } else {
+      console.log(`Website URL section category: "${websiteUrlSection.category}"`);
+      if (websiteUrlSection.category !== "Best Practice") {
+        console.error(`[FAIL] Website URL section category is "${websiteUrlSection.category}" (expected "Best Practice")!`);
+        allPassed = false;
+      } else {
+        console.log("[PASS] Website URL section is returned as Best Practice.");
+      }
+    }
+
+    if (!addressSection) {
+      console.error("[FAIL] Address & service area section not found!");
+      allPassed = false;
+    } else {
+      console.log(`Address & service area section category: "${addressSection.category}"`);
+      if (addressSection.category !== "Best Practice") {
+        console.error(`[FAIL] Address & service area section category is "${addressSection.category}" (expected "Best Practice")!`);
+        allPassed = false;
+      } else {
+        console.log("[PASS] Address & service area section is returned as Best Practice.");
+      }
+    }
+
+    // Check Social Profiles section content
+    console.log("\nChecking Social Profiles Section content...");
+    const socialSection = sections.find(s => s.title.toLowerCase().includes("social"));
+    if (!socialSection) {
+      console.error("[FAIL] Social Profiles section not found!");
+      allPassed = false;
+    } else {
+      const recommendation = socialSection.recommendation || "";
+      const whyItMatters = socialSection.whyItMatters || "";
+      
+      const foundSocials = data.report.businessDetails?.socials || [];
+      console.log(`Found socials: ${JSON.stringify(foundSocials)}`);
+      
+      const hasMissingMention = /missing|should establish|could establish|lacks|recommend/i.test(recommendation) ||
+                                /facebook|instagram|youtube|linkedin|twitter|tiktok/i.test(recommendation);
+                                
+      if (!hasMissingMention) {
+        console.error("[FAIL] Social Profiles check does not seem to contain both found socials and a list of missing major socials!");
+        allPassed = false;
+      } else {
+        console.log("[PASS] Social Profiles check includes found socials and recommendations on missing ones.");
+      }
     }
 
     // 5. Sources Check (Sourcing notes)
