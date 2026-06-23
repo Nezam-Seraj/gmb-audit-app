@@ -326,7 +326,8 @@ app.post("/api/audit", async (req, res) => {
               "X-Goog-Api-Key": process.env.GOOGLE_MAPS_PLATFORM_KEY,
               "X-Goog-FieldMask": "places.id,places.name,places.displayName,places.rating,places.userRatingCount,places.location,places.primaryType,places.primaryTypeDisplayName,places.types,places.formattedAddress,places.websiteUri,places.nationalPhoneNumber,places.regularOpeningHours,places.reviews"
             },
-            body: JSON.stringify(body)
+            body: JSON.stringify(body),
+            signal: AbortSignal.timeout(5000)
           });
 
           if (placesRes.ok) {
@@ -447,7 +448,8 @@ The following categories are broad, developer-facing Google Places API types. Th
             "X-Goog-Api-Key": process.env.GOOGLE_MAPS_PLATFORM_KEY,
             "X-Goog-FieldMask": "places.id,places.name,places.displayName,places.rating,places.userRatingCount,places.primaryType,places.primaryTypeDisplayName,places.types,places.formattedAddress"
           },
-          body: JSON.stringify(compBody)
+          body: JSON.stringify(compBody),
+          signal: AbortSignal.timeout(5000)
         });
 
         if (compRes.ok) {
@@ -732,7 +734,7 @@ Return ONLY a structured JSON object with this exact schema so the frontend can 
       required: ["businessName", "overallScore", "summary", "sections", "competitors", "businessDetails"]
     };
     let response;
-    let retries = 8;
+    let retries = 3;
     while (retries > 0) {
       try {
         response = await client.models.generateContent({
@@ -750,8 +752,8 @@ Return ONLY a structured JSON object with this exact schema so the frontend can 
         if (retries === 0) {
           throw err;
         }
-        // Exponential backoff capped at 30 seconds
-        const delay = Math.min(30000, Math.pow(2, 8 - retries) * 2000);
+        // Linear backoff: 2s, 4s, 6s
+        const delay = (3 - retries) * 2000;
         console.warn(`Waiting ${delay / 1000}s before retrying...`);
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
