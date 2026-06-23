@@ -446,7 +446,7 @@ The following categories are broad, developer-facing Google Places API types. Th
           headers: {
             "Content-Type": "application/json",
             "X-Goog-Api-Key": process.env.GOOGLE_MAPS_PLATFORM_KEY,
-            "X-Goog-FieldMask": "places.id,places.name,places.displayName,places.rating,places.userRatingCount,places.primaryType,places.primaryTypeDisplayName,places.types,places.formattedAddress"
+            "X-Goog-FieldMask": "places.id,places.name,places.displayName,places.rating,places.userRatingCount,places.primaryType,places.primaryTypeDisplayName,places.types,places.formattedAddress,places.reviews"
           },
           body: JSON.stringify(compBody),
           signal: AbortSignal.timeout(5000)
@@ -457,8 +457,25 @@ The following categories are broad, developer-facing Google Places API types. Th
           if (compData.places && compData.places.length > 0) {
             const compList = compData.places.slice(0, 10);
             let compText = "";
+            const now = new Date();
+            const hundredEightyDaysAgo = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
+            
             compList.forEach((place: any, index: number) => {
               const formattedCats = getFormattedCategories(place);
+              
+              // Calculate competitor review velocity from place.reviews
+              const reviews = place.reviews || [];
+              let reviewsInLast180Days = 0;
+              reviews.forEach((r: any) => {
+                if (r.publishTime) {
+                  const pubDate = new Date(r.publishTime);
+                  if (pubDate >= hundredEightyDaysAgo) {
+                    reviewsInLast180Days++;
+                  }
+                }
+              });
+              const compVelocity = `${reviewsInLast180Days} reviews in the last 180 days`;
+              
               compText += `Competitor ${index + 1}:
 - Name: ${place.displayName?.text || "Unknown"}
 - EXACT Real Star Rating: ${place.rating || 0}
@@ -466,12 +483,13 @@ The following categories are broad, developer-facing Google Places API types. Th
 - Address: ${place.formattedAddress || "Unknown"}
 - Primary Category: ${formattedCats.primary}
 - Mapped Secondary Categories: ${formattedCats.secondary.join(", ") || "None"}
+- Review Velocity Baseline: ${compVelocity} (Do NOT search the web for competitor velocity; use this baseline count to report velocity directly)
 `;
             });
 
             competitorApiContext = `
 [CRITICAL GOOGLE PLACES API REAL-TIME COMPETITOR DATA INJECTION]
-The following competitors were found by searching for the serviceLocation keyword "${serviceLocation}" using the Google Places API. You MUST treat the name, rating, review count, and mapped categories of these top competitors as absolute truth over grounded cached results when evaluating competitors:
+The following competitors were found by searching for the serviceLocation keyword "${serviceLocation}" using the Google Places API. You MUST treat the name, rating, review count, mapped categories, and review velocity baseline of these top competitors as absolute truth over grounded cached results when evaluating competitors:
 ${compText}
 [END COMPETITOR DATA INJECTION]
 `;
@@ -485,8 +503,8 @@ ${compText}
     const competitorPrompt = serviceLocation 
       ? `\nAdditionally, use the provided Service & City keyword ("${serviceLocation}") to identify the real, live top 10 ranking competitors in the local search results on Google Maps. CRITICAL: DO NOT HALLUCINATE COMPETITORS. Only use real businesses that actually exist and rank for this keyword. Compare them against the primary business and provide your analysis in the "competitors" JSON array. CRITICAL: You MUST return exactly 10 competitors in the "competitors" array without any truncation, omitting none, and ensuring exactly 10 items are populated in the JSON output. Pay special attention to these local ranking factors:
 1. Business Name: Are they adding keywords into their actual name? (Keyword stuffing in the title). If competitors are doing it, it's a massive ranking factor and the primary business is at a disadvantage. Adding keywords to the primary business name for parity would be a ranking boost, but could lead to profile suspension. This must be presented as an informed decision.
-2. Categories: What is their primary category? CRITICAL: Be extremely accurate with secondary categories. DO NOT guess or hallucinate secondary categories. Only list secondary categories you have hard evidence for. Enforce strict matching to official Google My Business categories (such as "Addiction Treatment Center", "Alcoholism Treatment Program", "Mental Health Service") and prohibit fake category names.
-3. Review Velocity: Enforce a numerical velocity estimate specifically targeting a 180-day timespan (e.g., '15 reviews in the last 180 days', or '0 reviews in the last 180 days' if none are found) for each competitor. Prohibit generic text or omissions. BE CONSERVATIVE and do not over-estimate or hallucinate review counts. State the EXACT, TRUE review count for these competitors.` 
+2. Categories: What is their primary category? CRITICAL: You MUST use the mapped competitor categories injected in the [CRITICAL GOOGLE PLACES API REAL-TIME COMPETITOR DATA INJECTION] section as the absolute truth. Do NOT perform web searches for competitor categories. Enforce strict matching to official Google My Business categories (such as "Addiction Treatment Center", "Alcoholism Treatment Program", "Mental Health Service") and prohibit fake category names.
+3. Review Velocity: Use the "Review Velocity Baseline" injected for each competitor in the [CRITICAL GOOGLE PLACES API REAL-TIME COMPETITOR DATA INJECTION] section as the absolute truth. Do NOT perform web searches to calculate competitor review velocity; strictly use the baseline counts provided (e.g., 'X reviews in the last 180 days').` 
       : "";
 
     let sourceSpecificInstructions = "";
@@ -563,7 +581,7 @@ For the categories "Addiction Treatment Center", "Mental Health Service", and "A
 [END TAXONOMY]
 
 CRITICAL INSTRUCTION: You MUST correctly identify the actual business name from the provided target. Do NOT output "Circle Social" or "Circle Social Inc" as the audited business name.
-CRITICAL INSTRUCTION: When reporting Categories (Primary and Secondary), you MUST identify the complete list of actual active primary and secondary categories on the profile. You are strictly prohibited from using fake, fabricated, or informal category names (e.g., "Addiction Recovery Service" or "Detox Center" are NOT official categories). DO NOT hallucinate, guess, or make up category titles. Do NOT report generic developer types like 'health', 'point_of_interest', 'medical_clinic', or 'establishment' as categories. Proactively use Search Grounding (e.g., searching for "[Business Name] categories" or "[Business Name] Google Maps listing categories") to locate the actual merchant-facing categories displayed on Google Search and Google Maps (e.g. Counselor, Halfway house, Alcoholism treatment program, Family counselor, Drug testing service, Mental health clinic, Mental health service, Rehabilitation center, etc.) for both the primary business and all competitors. List all categories that are active.
+CRITICAL INSTRUCTION: When reporting Categories (Primary and Secondary), you MUST identify the complete list of actual active primary and secondary categories on the profile. You are strictly prohibited from using fake, fabricated, or informal category names (e.g., "Addiction Recovery Service" or "Detox Center" are NOT official categories). DO NOT hallucinate, guess, or make up category titles. Do NOT report generic developer types like 'health', 'point_of_interest', 'medical_clinic', or 'establishment' as categories. Proactively use Search Grounding (e.g., searching for "[Business Name] categories" or "[Business Name] Google Maps listing categories") to locate the actual merchant-facing categories displayed on Google Search and Google Maps (e.g. Counselor, Halfway house, Alcoholism treatment program, Family counselor, Drug testing service, Mental health clinic, Mental health service, Rehabilitation center, etc.) for the primary business. For competitors, use the provided mapped categories in the competitor injection section directly without performing search grounding for them. List all categories that are active.
 CRITICAL INSTRUCTION: When auditing "Secondary categories" for the primary business, you MUST advise the user in the recommendation text to verify their secondary categories (such as 'Alcoholism Treatment Program', 'Mental Health Service', or 'Rehabilitation Center') by logging into their Google Business Profile dashboard. Explain that secondary categories are often hidden or restricted from standard public search snippets and Google Places API developer fields, so verifying them directly inside the GBP dashboard is a critical best practice. Ensure that you never report fake category names or generic developer types like 'health' or 'medical_clinic' as categories.
 CRITICAL INSTRUCTION: When checking review velocity for both the primary business and each competitor, you MUST enforce numerical velocity estimates for the last 180 days (e.g., "15 reviews in the last 180 days", or "0 reviews in the last 180 days" if none are found). Prohibit generic text or omissions.
 CRITICAL INSTRUCTION: When auditing "Hours vs competitors", you MUST use the injected "EXACT Real Opening Hours" value (when status is success) as the absolute truth for the business hours of the primary business. Specify the exact business hours in the audit text (e.g., "Open 24 hours" or "Monday - Friday: 9 AM - 5 PM").
