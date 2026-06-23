@@ -455,7 +455,7 @@ The following categories are broad, developer-facing Google Places API types. Th
         if (compRes.ok) {
           const compData = await compRes.json();
           if (compData.places && compData.places.length > 0) {
-            const compList = compData.places.slice(0, 10);
+            const compList = compData.places.slice(0, 5);
             let compText = "";
             const now = new Date();
             const hundredEightyDaysAgo = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
@@ -501,7 +501,7 @@ ${compText}
     }
 
     const competitorPrompt = serviceLocation 
-      ? `\nAdditionally, use the provided Service & City keyword ("${serviceLocation}") to identify the real, live top 10 ranking competitors in the local search results on Google Maps. CRITICAL: DO NOT HALLUCINATE COMPETITORS. Only use real businesses that actually exist and rank for this keyword. Compare them against the primary business and provide your analysis in the "competitors" JSON array. CRITICAL: You MUST return exactly 10 competitors in the "competitors" array without any truncation, omitting none, and ensuring exactly 10 items are populated in the JSON output. Pay special attention to these local ranking factors:
+      ? `\nAdditionally, use the provided Service & City keyword ("${serviceLocation}") to identify the real, live top 5 ranking competitors in the local search results on Google Maps. CRITICAL: DO NOT HALLUCINATE COMPETITORS. Only use real businesses that actually exist and rank for this keyword. Compare them against the primary business and provide your analysis in the "competitors" JSON array. CRITICAL: You MUST return exactly 5 competitors in the "competitors" array without any truncation, omitting none, and ensuring exactly 5 items are populated in the JSON output. Pay special attention to these local ranking factors:
 1. Business Name: Are they adding keywords into their actual name? (Keyword stuffing in the title). If competitors are doing it, it's a massive ranking factor and the primary business is at a disadvantage. Adding keywords to the primary business name for parity would be a ranking boost, but could lead to profile suspension. This must be presented as an informed decision.
 2. Categories: What is their primary category? CRITICAL: You MUST use the mapped competitor categories injected in the [CRITICAL GOOGLE PLACES API REAL-TIME COMPETITOR DATA INJECTION] section as the absolute truth. Do NOT perform web searches for competitor categories. Enforce strict matching to official Google My Business categories (such as "Addiction Treatment Center", "Alcoholism Treatment Program", "Mental Health Service") and prohibit fake category names.
 3. Review Velocity: Use the "Review Velocity Baseline" injected for each competitor in the [CRITICAL GOOGLE PLACES API REAL-TIME COMPETITOR DATA INJECTION] section as the absolute truth. Do NOT perform web searches to calculate competitor review velocity; strictly use the baseline counts provided (e.g., 'X reviews in the last 180 days').` 
@@ -649,7 +649,7 @@ Return ONLY a structured JSON object with this exact schema so the frontend can 
       "recommendation": "string (Step-by-step actionable optimization guidance)"
     }
   ],
-  "competitors": [ // Array of EXACTLY 10 competitors found for the keyword. You MUST return exactly 10 competitors in this array, without truncation, omitting none, and ensuring exactly 10 items are populated in the JSON output, or an empty array if no serviceLocation was provided.
+  "competitors": [ // Array of EXACTLY 5 competitors found for the keyword. You MUST return exactly 5 competitors in this array, without truncation, omitting none, and ensuring exactly 5 items are populated in the JSON output, or an empty array if no serviceLocation was provided.
     {
       "name": "string (Exact competitor business name)",
       "estimatedScore": number, // out of 100
@@ -706,7 +706,7 @@ Return ONLY a structured JSON object with this exact schema so the frontend can 
         },
         competitors: {
           type: Type.ARRAY,
-          description: "Array of exactly 10 competitors found for the keyword. You MUST return exactly 10 competitors in this array without truncation, omitting none, and ensuring exactly 10 items are populated in the JSON output.",
+          description: "Array of exactly 5 competitors found for the keyword. You MUST return exactly 5 competitors in this array without truncation, omitting none, and ensuring exactly 5 items are populated in the JSON output.",
           items: {
             type: Type.OBJECT,
             properties: {
