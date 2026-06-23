@@ -901,4 +901,5 @@ if (!process.env.VERCEL) {
   startServer();
 }
 
+export const maxDuration = 60;
 export default app;
