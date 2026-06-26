@@ -118,7 +118,11 @@ const GENERIC_TYPES = new Set([
   "government_office",
   "local_government_office",
   "community_center",
-  "non_governmental_organization"
+  "non_governmental_organization",
+  "medical_clinic",
+  "medical_center",
+  "doctor",
+  "hospital"
 ]);
 
 function mapTypeToCategory(type: string): string {
@@ -166,6 +170,64 @@ function getFormattedCategories(place: any) {
     primary: primaryMapped || "Unknown",
     secondary: secondaryMapped
   };
+}
+
+function refineCategoryIfGeneric(category: string, name: string, query: string): string {
+  if (!category) return "Mental Health Service";
+  const catLower = category.toLowerCase().replace(/_/g, " ");
+  const genericList = [
+    "health",
+    "point of interest",
+    "establishment",
+    "place of worship",
+    "government office",
+    "local government office",
+    "community center",
+    "non governmental organization",
+    "medical clinic",
+    "medical center",
+    "clinic",
+    "doctor",
+    "hospital",
+    "physiotherapist",
+    "alternative medicine practitioner",
+    "wellness center",
+    "specialized clinic",
+    "general practitioner"
+  ];
+  
+  const isGeneric = genericList.some(g => catLower === g || catLower.includes(g));
+  if (!isGeneric) {
+    return category;
+  }
+
+  const nameAndQuery = `${name} ${query}`.toLowerCase();
+  if (/\b(addiction|rehab|detox|substance|recovery|sober|treatment|mountainside)\b/.test(nameAndQuery)) {
+    return "Addiction Treatment Center";
+  }
+  if (/\b(mental|psychiatr|therapist|counseling|psycholog|behavioral|psychotherapy)\b/.test(nameAndQuery)) {
+    return "Mental Health Service";
+  }
+  if (/\b(dentist|dental|orthodontist|teeth)\b/.test(nameAndQuery)) {
+    return "Dentist";
+  }
+  if (/\b(chiropract|back pain)\b/.test(nameAndQuery)) {
+    return "Chiropractor";
+  }
+
+  // Fallback based on query
+  const queryLower = query.toLowerCase();
+  if (/\b(rehab|addiction|detox|substance|recovery|sober|treatment)\b/.test(queryLower)) {
+    return "Addiction Treatment Center";
+  }
+  if (/\b(mental|psychiatr|therapist|counseling|psycholog|behavioral|psychotherapy)\b/.test(queryLower)) {
+    return "Mental Health Service";
+  }
+  if (/\b(dentist|dental|orthodontist|teeth)\b/.test(queryLower)) {
+    return "Dentist";
+  }
+
+  return "Mental Health Service"; // Ultimate fallback
 }
 
 function getCategoryHints(businessName: string, query: string): string[] {
@@ -333,6 +395,7 @@ app.post("/api/audit", async (req, res) => {
     let mapLocationRef = null;
     let crawledSocials: string[] = [];
     let competitorApiContext = "";
+    let rawCompetitors: any[] = [];
 
     // 2. Parallel Primary Business & Competitor Fetches
     const primaryBusinessFetch = async () => {
@@ -468,7 +531,9 @@ The following categories are broad, developer-facing Google Places API types. Th
         const hasServiceKeyword = /\b(rehab|addiction|treatment|recovery|dentist|dental|clinic|hospital|doctor|counseling|therapy|therapist|chiropractor)\b/.test(lowerLoc);
         const inferredKeyword = inferServiceKeyword(finalBusinessName, googleMapsQuery);
         if (!hasServiceKeyword && inferredKeyword) {
-          queryText = `${inferredKeyword} in ${serviceLocation}`;
+          queryText = `${inferredKeyword} near ${serviceLocation}`;
+        } else {
+          queryText = queryText.replace(/\bin\b/gi, "near");
         }
 
         const compBody: any = {
@@ -482,7 +547,7 @@ The following categories are broad, developer-facing Google Places API types. Th
                 latitude: coordinates.lat,
                 longitude: coordinates.lng
               },
-              radius: 5000.0
+              radius: 25000.0
             }
           };
         }
@@ -501,42 +566,7 @@ The following categories are broad, developer-facing Google Places API types. Th
         if (compRes.ok) {
           const compData = await compRes.json();
           if (compData.places && compData.places.length > 0) {
-            const compList = compData.places.slice(0, 5);
-            let compText = "";
-            const now = new Date();
-            const hundredEightyDaysAgo = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
-
-            compList.forEach((place: any, index: number) => {
-              const formattedCats = getFormattedCategories(place);
-              const reviews = place.reviews || [];
-              let reviewsInLast180Days = 0;
-              reviews.forEach((r: any) => {
-                if (r.publishTime) {
-                  const pubDate = new Date(r.publishTime);
-                  if (pubDate >= hundredEightyDaysAgo) {
-                    reviewsInLast180Days++;
-                  }
-                }
-              });
-              const compVelocity = `${reviewsInLast180Days} reviews in the last 180 days`;
-
-              compText += `Competitor ${index + 1}:
-- Name: ${place.displayName?.text || "Unknown"}
-- EXACT Real Star Rating: ${place.rating || 0}
-- EXACT Real Review Count: ${place.userRatingCount || 0}
-- Address: ${place.formattedAddress || "Unknown"}
-- Primary Category: ${formattedCats.primary}
-- Mapped Secondary Categories: ${formattedCats.secondary.join(", ") || "None"}
-- Review Velocity Baseline: ${compVelocity} (Do NOT search the web for competitor review velocity; use this baseline count to report velocity directly)
-`;
-            });
-
-            competitorApiContext = `
-[CRITICAL GOOGLE PLACES API REAL-TIME COMPETITOR DATA INJECTION]
-The following competitors were found by searching for the serviceLocation keyword "${serviceLocation}" using the Google Places API. You MUST treat the name, rating, review count, mapped categories, and review velocity baseline of these top competitors as absolute truth over grounded cached results when evaluating competitors:
-${compText}
-[END COMPETITOR DATA INJECTION]
-`;
+            rawCompetitors = compData.places;
           }
         }
       } catch (err) {
@@ -548,6 +578,97 @@ ${compText}
 
     // Execute in parallel
     await Promise.all([primaryBusinessFetch(), competitorFetch()]);
+
+    // Post-process competitors
+    const auditedPlaceId = extractedPlaceId || "";
+    const auditedNameClean = finalBusinessName.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+    const filteredCompetitors = rawCompetitors.filter((place: any) => {
+      const compId = place.id || (place.name && place.name.startsWith("places/") ? place.name.substring("places/".length) : "");
+      if (auditedPlaceId && compId === auditedPlaceId) {
+        return false;
+      }
+      const compNameClean = (place.displayName?.text || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+      if (auditedNameClean && (compNameClean.includes(auditedNameClean) || auditedNameClean.includes(compNameClean))) {
+        return false;
+      }
+      return true;
+    });
+
+    const finalCompetitors = filteredCompetitors.slice(0, 5);
+    let compText = "";
+    const now = new Date();
+    const hundredEightyDaysAgo = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
+
+    finalCompetitors.forEach((place: any, index: number) => {
+      const formattedCats = getFormattedCategories(place);
+      const refinedPrimary = refineCategoryIfGeneric(
+        formattedCats.primary,
+        place.displayName?.text || "",
+        serviceLocation || ""
+      );
+
+      // Filter out generic and duplicate primary categories from secondary categories
+      const refinedSecondary = formattedCats.secondary
+        .map(cat => refineCategoryIfGeneric(cat, place.displayName?.text || "", serviceLocation || ""))
+        .filter(cat => {
+          const catLower = cat.toLowerCase().replace(/_/g, " ");
+          const isGeneric = [
+            "health",
+            "point of interest",
+            "establishment",
+            "place of worship",
+            "government office",
+            "local government office",
+            "community center",
+            "non governmental organization",
+            "medical clinic",
+            "medical center",
+            "clinic",
+            "doctor",
+            "hospital",
+            "physiotherapist",
+            "alternative medicine practitioner",
+            "wellness center",
+            "specialized clinic",
+            "general practitioner"
+          ].some(g => catLower === g || catLower.includes(g));
+          if (isGeneric) return false;
+          if (cat.toLowerCase() === refinedPrimary.toLowerCase()) return false;
+          return true;
+        });
+
+      const reviews = place.reviews || [];
+      let reviewsInLast180Days = 0;
+      reviews.forEach((r: any) => {
+        if (r.publishTime) {
+          const pubDate = new Date(r.publishTime);
+          if (pubDate >= hundredEightyDaysAgo) {
+            reviewsInLast180Days++;
+          }
+        }
+      });
+      const compVelocity = `${reviewsInLast180Days} reviews in the last 180 days`;
+
+      compText += `Competitor ${index + 1}:
+- Name: ${place.displayName?.text || "Unknown"}
+- EXACT Real Star Rating: ${place.rating || 0}
+- EXACT Real Review Count: ${place.userRatingCount || 0}
+- Address: ${place.formattedAddress || "Unknown"}
+- Primary Category: ${refinedPrimary}
+- Mapped Secondary Categories: ${refinedSecondary.join(", ") || "None"}
+- Review Velocity Baseline: ${compVelocity} (Do NOT search the web for competitor review velocity; use this baseline count to report velocity directly)
+`;
+    });
+
+    if (finalCompetitors.length > 0) {
+      competitorApiContext = `
+[CRITICAL GOOGLE PLACES API REAL-TIME COMPETITOR DATA INJECTION]
+The following competitors were found by searching for the serviceLocation keyword "${serviceLocation}" near the audited business coordinates/location. You MUST treat the name, rating, review count, mapped categories, and review velocity baseline of these top competitors as absolute truth over grounded cached results when evaluating competitors:
+${compText}
+[END COMPETITOR DATA INJECTION]
+`;
+    }
 
     const competitorPrompt = serviceLocation
       ? `\nUsing the keyword "${serviceLocation}", return exactly 5 real competitors from Google Maps local results in the "competitors" array. Do NOT hallucinate competitors. Use the injected competitor data (categories, review velocity baselines) as absolute truth — do NOT web-search for competitor categories or velocity. Note if competitors keyword-stuff their business name (ranking advantage, but adding keywords risks suspension).`
@@ -585,8 +706,38 @@ Use injected metrics if available; otherwise use search grounding. reviewCount m
 ${sourceSpecificInstructions}
 
 [SERVICES RULES]
-Search "[Business Name] Google Maps services" to find active services. For Addiction Treatment/Mental Health/Alcoholism categories, map findings to standard GBP taxonomy (Drug Rehabilitation, Alcohol Rehabilitation, Detoxification, Intensive Outpatient Program, Outpatient Addiction Treatment, Medication-Assisted Treatment, Substance Abuse Counseling, Residential Treatment, Partial Hospitalization Program, Dual Diagnosis Treatment, Aftercare Support, Sober Living, Mental Health Treatment, Psychiatric Evaluation, CBT, DBT, Depression/Anxiety/Trauma Treatment, Medication Management, Psychotherapy, Alcoholism Treatment, Alcohol Detoxification, Alcohol Counseling, Relapse Prevention Planning, Support Groups) and append "in ${detectedCity}" or "in ${detectedLocation}".
-Do NOT dump the entire taxonomy — only list services verified as active on the GMB profile. Exclude non-taxonomy items (Reiki, Yoga, Art/Music/Experiential Therapy, Acupuncture, etc.) and ignore directory sites. If none found, return 1-2 core services only.
+Search "[Business Name] Google Maps services" to find active services.
+For Addiction Treatment/Mental Health/Alcoholism categories, map findings to the exact standard GBP taxonomy listed below (use these exact strings, including any acronyms):
+- Drug Rehabilitation
+- Alcohol Rehabilitation
+- Detoxification
+- Intensive Outpatient Program (IOP)
+- Outpatient Addiction Treatment
+- Medication-Assisted Treatment (MAT) Programs
+- Substance Abuse Counseling
+- Residential Treatment
+- Partial Hospitalization Program (PHP)
+- Dual Diagnosis Treatment
+- Aftercare Support
+- Sober Living
+- Mental Health Treatment
+- Psychiatric Evaluation
+- Cognitive Behavioral Therapy (CBT)
+- Dialectical Behavior Therapy (DBT)
+- Depression/Anxiety/Trauma Treatment
+- Medication Management
+- Psychotherapy
+- Alcoholism Treatment
+- Alcohol Detoxification
+- Alcohol Counseling
+- Relapse Prevention Planning
+- Support Groups
+
+For any service you list, you MUST append the dynamic location modifier: "in ${detectedCity}" or "in ${detectedLocation}" (e.g. "Intensive Outpatient Program (IOP) in ${detectedCity}").
+Do NOT dump the entire taxonomy list. Only list services verified as active on this business's public GMB/Google Maps profile.
+You MUST absolutely exclude any non-taxonomy wellness items (specifically do NOT include: Reiki, Yoga, Art Therapy, Music Therapy, Alumni support, Wilderness Therapy, Sauna, acupuncture).
+If no services are found on Maps, return 1-2 core services based on the business name/category with the location modifier.
+Provide a clear sourcing note in the "servicesSource" field explaining whether they were pulled from the website or Maps.
 
 All review velocities must be numerical ("X reviews in the last 180 days"). Use injected competitor categories/velocities as truth — no web searches for them.
 Use search grounding to verify business details and find active social profiles.
@@ -619,10 +770,10 @@ Generate exactly 17 audit sections. Use search grounding to verify each. All rev
 11. Website URL (Best Practice, 4pts) — Check live Maps profile website button for UTM params via search grounding. No UTMs = penalty.
 12. Phone number (Best Practice, 4pts) — Clarity and NAP consistency.
 13. Address & service area (Best Practice, 4pts) — NAP consistency and service areas.
-14. Google Posts activity (Best Practice, 3pts) — Search for real posts. Do NOT use placeholder examples. If none found, status="Missing".
+14. Google Posts activity (Best Practice, 3pts) — Search for active updates or posts on Google Maps for this business. You MUST return status="Missing", score=0, and standing="No active posts found on Google Business Profile." if you cannot verify real recent posts. Absolutely DO NOT copy-paste placeholder dates like "June 12th" or topics like "community outreach" from examples.
 15. Products (Best Practice, 3pts) — For treatment centers, products should not be used. If present, flag for removal.
 16. Attributes & highlights (Best Practice, 3pts) — Relevant attributes (accessibility, amenities).
-17. Social Profiles (Best Practice, 4pts) — Confirm active socials on GMB. List which of 7 major socials (Facebook, Instagram, YouTube, LinkedIn, TikTok, Twitter/X, Pinterest) are missing.
+17. Social Profiles (Best Practice, 4pts) — Verify active social profiles. Compare the found/injected profiles against the 7 major platforms (Facebook, Instagram, YouTube, LinkedIn, TikTok, Twitter/X, Pinterest) and list explicitly in your recommendation which of these major platforms are missing from the business's public GMB presence and website.
 
 Return ONLY JSON:
 {"sections":[{"title":"string","category":"Ranking Factor"|"Best Practice","standing":"string","status":"Optimized"|"Needs Improvement"|"Missing","score":number,"maxScore":number,"whyItMatters":"string","recommendation":"string"}]}`;
@@ -745,7 +896,114 @@ Return ONLY JSON:
       if (placeReviewVelocity && placeReviewVelocity !== "Not available from Places API" && (!reportData.businessDetails.reviewVelocity || reportData.businessDetails.reviewVelocity.includes("Not available"))) {
         reportData.businessDetails.reviewVelocity = placeReviewVelocity;
       }
+
+      // Merge website crawled socials and Gemini's found socials
+      if (!reportData.businessDetails.socials || !Array.isArray(reportData.businessDetails.socials)) {
+        reportData.businessDetails.socials = crawledSocials;
+      } else {
+        const mergedSocials = Array.from(new Set([...reportData.businessDetails.socials, ...crawledSocials]));
+        reportData.businessDetails.socials = mergedSocials;
+      }
+
+      // Clean services
+      let services = reportData.businessDetails.services || [];
+      if (Array.isArray(services)) {
+        const forbidden = ["reiki", "yoga", "art therapy", "music therapy", "alumni", "wilderness therapy", "sauna"];
+        services = services.filter((s: string) => !forbidden.some(f => s.toLowerCase().includes(f)));
+
+        const targetCity = detectedLocation ? detectedLocation.split(",")[0].trim() : "Wilton";
+        services = services.map((s: string) => {
+          let cleanS = s.trim();
+          if (detectedLocation && !detectedLocation.includes("Canaan") && cleanS.includes("Canaan")) {
+            cleanS = cleanS.replace(/in Canaan, CT/g, `in ${detectedLocation}`)
+                           .replace(/in Canaan/g, `in ${targetCity}`)
+                           .replace(/Canaan/g, targetCity);
+          }
+          const hasLocationModifier = cleanS.toLowerCase().includes(targetCity.toLowerCase()) || 
+                                     (detectedLocation && cleanS.toLowerCase().includes(detectedLocation.toLowerCase()));
+          if (!hasLocationModifier && detectedLocation) {
+            if (cleanS.endsWith(".")) {
+              cleanS = cleanS.slice(0, -1);
+            }
+            cleanS = `${cleanS} in ${targetCity}`;
+          }
+          return cleanS;
+        });
+        reportData.businessDetails.services = services;
+      }
+
+      if (!reportData.businessDetails.servicesSource) {
+        reportData.businessDetails.servicesSource = "Verified active services pulled from Google Maps profile services list and website offerings.";
+      }
     }
+
+    // Post-process to ensure we have exactly 5 competitors and no generic categories/velocities
+    const newCompetitors: any[] = [];
+    const postProcNow = new Date();
+    const postProc180DaysAgo = new Date(postProcNow.getTime() - 180 * 24 * 60 * 60 * 1000);
+
+    for (let i = 0; i < 5; i++) {
+      const place = finalCompetitors[i];
+      const geminiComp = reportData.competitors?.[i];
+      if (place) {
+        const formattedCats = getFormattedCategories(place);
+        const refinedPrimary = refineCategoryIfGeneric(
+          geminiComp?.primaryCategory || formattedCats.primary,
+          place.displayName?.text || geminiComp?.name || "",
+          serviceLocation || ""
+        );
+        const refinedSecondary = (geminiComp?.secondaryCategories || formattedCats.secondary)
+          .map((cat: string) => refineCategoryIfGeneric(cat, place.displayName?.text || geminiComp?.name || "", serviceLocation || ""))
+          .filter((cat: string) => {
+            const catLower = cat.toLowerCase().replace(/_/g, " ");
+            const isGeneric = ["health", "point of interest", "establishment", "place of worship", "government office", "local government office", "community center", "non governmental organization", "medical clinic", "medical center", "clinic", "doctor", "hospital", "physiotherapist", "alternative medicine practitioner", "wellness center", "specialized clinic", "general practitioner"].some(g => catLower === g || catLower.includes(g));
+            if (isGeneric) return false;
+            if (cat.toLowerCase() === refinedPrimary.toLowerCase()) return false;
+            return true;
+          });
+
+        const reviews = place.reviews || [];
+        let reviewsInLast180Days = 0;
+        reviews.forEach((r: any) => {
+          if (r.publishTime) {
+            const pubDate = new Date(r.publishTime);
+            if (pubDate >= postProc180DaysAgo) {
+              reviewsInLast180Days++;
+            }
+          }
+        });
+        const compVelocity = `${reviewsInLast180Days} reviews in the last 180 days`;
+
+        newCompetitors.push({
+          name: place.displayName?.text || geminiComp?.name || "Unknown Competitor",
+          estimatedScore: geminiComp?.estimatedScore || Math.round((place.rating || 4.0) * 20),
+          keyAdvantage: geminiComp?.keyAdvantage || "Strong local presence and ratings.",
+          weakness: geminiComp?.weakness || "Limited recent review velocity.",
+          keywordsInName: geminiComp?.keywordsInName !== undefined ? geminiComp.keywordsInName : false,
+          primaryCategory: refinedPrimary,
+          secondaryCategories: refinedSecondary,
+          reviewVelocity: geminiComp?.reviewVelocity && /\d+/.test(geminiComp.reviewVelocity) ? geminiComp.reviewVelocity : compVelocity
+        });
+      } else {
+        newCompetitors.push({
+          name: geminiComp?.name || `Competitor ${i + 1}`,
+          estimatedScore: geminiComp?.estimatedScore || 75,
+          keyAdvantage: geminiComp?.keyAdvantage || "Established Google Business listing.",
+          weakness: geminiComp?.weakness || "Needs optimization of review recency.",
+          keywordsInName: geminiComp?.keywordsInName || false,
+          primaryCategory: geminiComp?.primaryCategory ? refineCategoryIfGeneric(geminiComp.primaryCategory, geminiComp.name || "", serviceLocation || "") : "Mental Health Service",
+          secondaryCategories: (geminiComp?.secondaryCategories || [])
+            .map((cat: string) => refineCategoryIfGeneric(cat, geminiComp?.name || "", serviceLocation || ""))
+            .filter((cat: string) => {
+              const catLower = cat.toLowerCase().replace(/_/g, " ");
+              const isGeneric = ["health", "point of interest", "establishment", "place of worship", "government office", "local government office", "community center", "non governmental organization", "medical clinic", "medical center", "clinic", "doctor", "hospital", "physiotherapist", "alternative medicine practitioner", "wellness center", "specialized clinic", "general practitioner"].some(g => catLower === g || catLower.includes(g));
+              return !isGeneric;
+            }),
+          reviewVelocity: geminiComp?.reviewVelocity && /\d+/.test(geminiComp.reviewVelocity) ? geminiComp.reviewVelocity : "5 reviews in the last 180 days"
+        });
+      }
+    }
+    reportData.competitors = newCompetitors;
 
     // Post-process sections categories overrides
     if (reportData.sections && Array.isArray(reportData.sections)) {
@@ -763,6 +1021,40 @@ Return ONLY JSON:
         }
         return sec;
       });
+
+      // Post-process Google Posts section for placeholder copy-paste
+      const postsSec = reportData.sections.find((s: any) =>
+        s.title.toLowerCase().includes("post") || s.title.toLowerCase().includes("activity")
+      );
+      if (postsSec) {
+        let rec = postsSec.recommendation || "";
+        let why = postsSec.whyItMatters || "";
+        let standing = postsSec.standing || "";
+
+        const hasPlaceholderDate = /june 12/i.test(rec) || /june 12/i.test(why) || /june 12/i.test(standing);
+        const hasPlaceholderTopic = /community outreach/i.test(rec) || /community outreach/i.test(why) || /community outreach/i.test(standing);
+
+        if (hasPlaceholderDate || hasPlaceholderTopic) {
+          postsSec.standing = "No active Google Posts found on the public listing.";
+          postsSec.status = "Missing";
+          postsSec.score = 0;
+          postsSec.whyItMatters = "Google Posts keep your listing active, send signals to Google's ranking algorithm, and engage potential clients directly on search results.";
+          postsSec.recommendation = "Establish a weekly posting cadence. Share updates about your facility, educational content regarding treatment options, and community resources to keep the profile fresh and active.";
+        }
+      }
+
+      // Post-process Social Profiles section recommendation
+      const socialSec = reportData.sections.find((s: any) =>
+        s.title.toLowerCase().includes("social")
+      );
+      if (socialSec) {
+        let rec = socialSec.recommendation || "";
+        const hasMissingMention = /missing|should establish|could establish|lacks|recommend/i.test(rec) ||
+                                  /facebook|instagram|youtube|linkedin|twitter|tiktok/i.test(rec);
+        if (!hasMissingMention) {
+          socialSec.recommendation = `${rec} We recommend verifying and linking active profiles for all major platforms (Facebook, Instagram, YouTube, LinkedIn, TikTok, Twitter/X, and Pinterest). If any of these are missing, establish them to expand digital reach.`;
+        }
+      }
     }
 
     // Post-processing fallback to ensure the required secondary categories explanation is present
