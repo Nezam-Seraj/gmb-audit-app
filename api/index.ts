@@ -298,6 +298,149 @@ function inferServiceKeyword(businessName: string, query: string): string {
   return "";
 }
 
+/**
+ * Normalizes, consolidates, and deduplicates service offerings.
+ * Maps substance-specific treatments and detoxes to generalized medical terms.
+ * Leaves non-addiction niches (e.g. dentists, chiropractors) untouched.
+ */
+function consolidateServices(rawServices: string[], detectedLocation: string): string[] {
+  if (!Array.isArray(rawServices) || rawServices.length === 0) {
+    return [];
+  }
+
+  const targetCity = detectedLocation ? detectedLocation.split(",")[0].trim() : "Wilton";
+  const forbidden = ["reiki", "yoga", "art therapy", "music therapy", "alumni", "wilderness therapy", "sauna", "acupuncture"];
+
+  const cityLower = targetCity.toLowerCase();
+  const locationLower = detectedLocation ? detectedLocation.toLowerCase() : "";
+
+  // Escape special regex chars
+  const escapedCity = targetCity.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+  const escapedLoc = detectedLocation ? detectedLocation.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') : '';
+
+  const suffixPatterns = [
+    new RegExp(`\\s+in\\s+${escapedCity}\\b`, 'i'),
+    new RegExp(`\\s+in\\s+Canaan\\b`, 'i') // Historical fallback
+  ];
+  if (escapedLoc && escapedLoc !== escapedCity) {
+    suffixPatterns.push(new RegExp(`\\s+in\\s+${escapedLoc}\\b`, 'i'));
+  }
+
+  // Consolidation mappings for substance abuse niches
+  const rules = [
+    {
+      pattern: /\b(?:alcohol|heroin|cocaine|opiate|fentanyl|meth|benzo|substance|drug|prescription|medical|chemical)\s+(?:detox|detoxification)\b/i,
+      replacement: "Medical Detoxification"
+    },
+    {
+      pattern: /\b(?:detox|detoxification)\b/i,
+      replacement: "Medical Detoxification"
+    },
+    {
+      pattern: /\b(?:heroin|cocaine|opiate|fentanyl|meth|benzo|prescription\s+drug|illicit\s+drug|substance\s+use|substance\s+abuse|chemical\s+dependency|drug)\s+(?:addiction\s+)?(?:treatment|rehab|rehabilitation|therapy|recovery|program)\b/i,
+      replacement: "Substance Abuse Treatment"
+    },
+    {
+      pattern: /\b(?:alcohol|alcoholism)\s+(?:addiction\s+)?(?:treatment|rehab|rehabilitation|therapy|recovery|program)\b/i,
+      replacement: "Alcohol Addiction Treatment"
+    },
+    {
+      pattern: /\bintensive\s+outpatient\b/i,
+      replacement: "Intensive Outpatient Program (IOP)"
+    },
+    {
+      pattern: /\bpartial\s+hospitalization\b/i,
+      replacement: "Partial Hospitalization Program (PHP)"
+    },
+    {
+      pattern: /\bmedication[- ]assisted\b/i,
+      replacement: "Medication-Assisted Treatment (MAT)"
+    },
+    {
+      pattern: /\b(?:inpatient|residential)\s+(?:rehab|treatment|program|care)\b/i,
+      replacement: "Residential Treatment"
+    },
+    {
+      pattern: /\boutpatient\s+(?:rehab|treatment|program|care)\b/i,
+      replacement: "Outpatient Treatment"
+    },
+    {
+      pattern: /\b(?:dual\s+diagnosis|co-occurring)\b/i,
+      replacement: "Dual Diagnosis Treatment"
+    }
+  ];
+
+  const consolidatedSet = new Set<string>();
+
+  rawServices.forEach(s => {
+    let cleanS = s.trim();
+
+    // Skip forbidden wellness/non-taxonomy services
+    if (forbidden.some(f => cleanS.toLowerCase().includes(f))) {
+      return;
+    }
+
+    // Strip trailing punctuation
+    if (cleanS.endsWith(".")) {
+      cleanS = cleanS.slice(0, -1).trim();
+    }
+
+    // 1. Strip known location suffixes to isolate the service name
+    suffixPatterns.forEach(pattern => {
+      cleanS = cleanS.replace(pattern, "").trim();
+    });
+
+    // Strip generic trailing location pattern if it matches known location info
+    if (detectedLocation) {
+      const genericSuffix = /\s+in\s+([A-Za-z\s,]{2,})$/i;
+      const match = cleanS.match(genericSuffix);
+      if (match) {
+        const placePart = match[1].trim().toLowerCase();
+        if (
+          placePart === cityLower ||
+          placePart === locationLower ||
+          placePart === "canaan" ||
+          placePart.includes("canaan") ||
+          placePart.includes(cityLower) ||
+          /^[a-z\s]+,\s*[a-z]{2}$/i.test(placePart)
+        ) {
+          cleanS = cleanS.replace(genericSuffix, "").trim();
+        }
+      }
+    }
+
+    // 2. Apply consolidation rules
+    let mappedService = cleanS;
+    for (const rule of rules) {
+      if (rule.pattern.test(cleanS)) {
+        mappedService = rule.replacement;
+        break;
+      }
+    }
+
+    // 3. Fallback Title Casing for unmapped services if raw text is poorly capitalized
+    if (mappedService.toLowerCase() === cleanS.toLowerCase()) {
+      if (mappedService === mappedService.toLowerCase() || mappedService === mappedService.toUpperCase()) {
+        mappedService = mappedService
+          .split(/\s+/)
+          .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+          .join(" ");
+      }
+    }
+
+    // 4. Re-apply the uniform location modifier using the target city
+    if (detectedLocation && mappedService) {
+      mappedService = `${mappedService} in ${targetCity}`;
+    }
+
+    if (mappedService) {
+      consolidatedSet.add(mappedService);
+    }
+  });
+
+  return Array.from(consolidatedSet);
+}
+
 // 1. Audit Endpoint
 app.post("/api/audit", async (req, res) => {
   try {
@@ -706,14 +849,13 @@ Use injected metrics if available; otherwise use search grounding. reviewCount m
 ${sourceSpecificInstructions}
 
 [SERVICES RULES]
-Search Google Maps and search engine results for "[Business Name] Google Maps services" and "[Business Name] website treatment programs" to gather the complete, exhaustive list of all specific treatment services offered.
-Do NOT map them to generic roll-up categories unless no specific services are found.
-You MUST return the actual, specific services listed on the profile and website (for example, specific services like "Cocaine Addiction Treatment", "Anxiety Treatment", "Bipolar Disorder Treatment", "Fentanyl Addiction Treatment", "Depression Treatment", "PTSD Treatment", "Alcohol Detoxification", "Heroin Detox", "Supportive Housing", "Outpatient Addiction Treatment", "Intensive Outpatient Program (IOP)", "Partial Hospitalization Program (PHP)", "Medication-Assisted Treatment (MAT) Programs", etc., if they are listed on the profile).
-Be extremely thorough and list all distinct services (aim to retrieve the full list of up to 40 distinct services) rather than grouping them.
-For any service you list, you MUST append the dynamic location modifier: "in ${detectedCity}" or "in ${detectedLocation}" (e.g. "Cocaine Addiction Treatment in ${detectedCity}").
-Do NOT dump generic lists. Only list services verified as active on this business's public GMB/Google Maps profile. Absolutely DO NOT hallucinate or add any treatment service that is not explicitly verified on either their public Google Maps profile services list or their website services page. Do not copy generic lists or assume services exist.
+Search Google Maps and search engine results for "[Business Name] Google Maps services" and "[Business Name] website treatment programs" to gather the list of treatment services offered.
+Group and consolidate substance-specific detoxes and treatments to focus on high-quality, high-value core services (e.g., consolidate specific drug detoxes like "Heroin Detox" or "Cocaine Detox" into "Medical Detoxification", and drug-specific treatments into "Substance Abuse Treatment").
+Target a clean list of 10-15 services in total.
+For any service you list, you MUST append the dynamic location modifier: "in ${detectedCity}" or "in ${detectedLocation}" (e.g., "Medical Detoxification in ${detectedCity}").
+Do NOT dump generic lists. Only list services verified as active on this business's public GMB/Google Maps profile or website. Absolutely DO NOT hallucinate or add any treatment service that is not explicitly verified.
 You MUST absolutely exclude any non-taxonomy wellness items (specifically do NOT include: Reiki, Yoga, Art Therapy, Music Therapy, Alumni support, Wilderness Therapy, Sauna, acupuncture).
-If no services are found on Maps, return 1-2 core services based on the business name/category with the location modifier.
+If no services are found on Maps or website, return 1-2 core services based on the business name/category with the location modifier.
 Provide a clear sourcing note in the "servicesSource" field explaining whether they were pulled from the website or Maps.
 
 All review velocities must be numerical ("X reviews in the last 180 days"). Use injected competitor categories/velocities as truth — no web searches for them.
@@ -894,31 +1036,12 @@ Return ONLY JSON:
         reportData.businessDetails.socials = mergedSocials;
       }
 
-      // Clean services
-      let services = reportData.businessDetails.services || [];
-      if (Array.isArray(services)) {
-        const forbidden = ["reiki", "yoga", "art therapy", "music therapy", "alumni", "wilderness therapy", "sauna"];
-        services = services.filter((s: string) => !forbidden.some(f => s.toLowerCase().includes(f)));
-
-        const targetCity = detectedLocation ? detectedLocation.split(",")[0].trim() : "Wilton";
-        services = services.map((s: string) => {
-          let cleanS = s.trim();
-          if (detectedLocation && !detectedLocation.includes("Canaan") && cleanS.includes("Canaan")) {
-            cleanS = cleanS.replace(/in Canaan, CT/g, `in ${detectedLocation}`)
-                           .replace(/in Canaan/g, `in ${targetCity}`)
-                           .replace(/Canaan/g, targetCity);
-          }
-          const hasLocationModifier = cleanS.toLowerCase().includes(targetCity.toLowerCase()) || 
-                                     (detectedLocation && cleanS.toLowerCase().includes(detectedLocation.toLowerCase()));
-          if (!hasLocationModifier && detectedLocation) {
-            if (cleanS.endsWith(".")) {
-              cleanS = cleanS.slice(0, -1);
-            }
-            cleanS = `${cleanS} in ${targetCity}`;
-          }
-          return cleanS;
-        });
-        reportData.businessDetails.services = services;
+      // Clean, consolidate, and deduplicate services
+      if (reportData.businessDetails.services) {
+        reportData.businessDetails.services = consolidateServices(
+          reportData.businessDetails.services,
+          detectedLocation
+        );
       }
 
       if (!reportData.businessDetails.servicesSource) {
