@@ -59,6 +59,7 @@ export default function App() {
   const [report, setReport] = useState<AuditReport | null>(null);
   const [sources, setSources] = useState<GroundingSource[]>([]);
   const [mapLocation, setMapLocation] = useState<{lat: number, lng: number} | null>(null);
+  const [googleMapsApiKey, setGoogleMapsApiKey] = useState<string>("");
   const [placesApiStatus, setPlacesApiStatus] = useState<"success" | "no_results" | "api_error" | "missing_key" | null>(null);
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
@@ -110,6 +111,16 @@ export default function App() {
         console.error("Error reading saved audits", e);
       }
     }
+
+    // Fetch Google Maps API Key from backend dynamically
+    fetch("/api/config")
+      .then(res => res.json())
+      .then(data => {
+        if (data.googleMapsApiKey) {
+          setGoogleMapsApiKey(data.googleMapsApiKey);
+        }
+      })
+      .catch(err => console.error("Error fetching map config:", err));
   }, []);
 
   // Save history helper
@@ -211,6 +222,9 @@ export default function App() {
       setReport(data.report);
       setSources(data.sources || []);
       setPlacesApiStatus(data.placesApiStatus || null);
+      if (data.googleMapsApiKey) {
+        setGoogleMapsApiKey(data.googleMapsApiKey);
+      }
       if (data.location) {
         setMapLocation(data.location);
       }
@@ -957,7 +971,7 @@ export default function App() {
                       Location Intelligence
                     </h4>
                   </div>
-                  <LocationMap businessName={report.businessName} location={mapLocation || undefined} />
+                  <LocationMap businessName={report.businessName} location={mapLocation || undefined} apiKey={googleMapsApiKey} />
               </div>
 
               {/* 7 Weighted Criteria Sections Accordions */}

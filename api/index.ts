@@ -706,10 +706,11 @@ Use injected metrics if available; otherwise use search grounding. reviewCount m
 ${sourceSpecificInstructions}
 
 [SERVICES RULES]
-Search "[Business Name] Google Maps services" to find the actual list of active services listed on the public profile.
+Search Google Maps and search engine results for "[Business Name] Google Maps services" and "[Business Name] website treatment programs" to gather the complete, exhaustive list of all specific treatment services offered.
 Do NOT map them to generic roll-up categories unless no specific services are found.
-You MUST return the actual, specific services listed on the profile (for example, specific services like "Cocaine Addiction Treatment", "Anxiety Treatment", "Bipolar Disorder Treatment", "Fentanyl Addiction Treatment", "Depression Treatment", "PTSD Treatment", "Alcohol Detoxification", etc., if they are listed on the profile).
-For any service you list, you MUST append the dynamic location modifier: "in ${detectedCity}" or "in ${detectedLocation}" (e.g. "Intensive Outpatient Program (IOP) in ${detectedCity}").
+You MUST return the actual, specific services listed on the profile and website (for example, specific services like "Cocaine Addiction Treatment", "Anxiety Treatment", "Bipolar Disorder Treatment", "Fentanyl Addiction Treatment", "Depression Treatment", "PTSD Treatment", "Alcohol Detoxification", "Heroin Detox", "Supportive Housing", "Outpatient Addiction Treatment", "Intensive Outpatient Program (IOP)", "Partial Hospitalization Program (PHP)", "Medication-Assisted Treatment (MAT) Programs", etc., if they are listed on the profile).
+Be extremely thorough and list all distinct services (aim to retrieve the full list of up to 40 distinct services) rather than grouping them.
+For any service you list, you MUST append the dynamic location modifier: "in ${detectedCity}" or "in ${detectedLocation}" (e.g. "Cocaine Addiction Treatment in ${detectedCity}").
 Do NOT dump generic lists. Only list services verified as active on this business's public GMB/Google Maps profile.
 You MUST absolutely exclude any non-taxonomy wellness items (specifically do NOT include: Reiki, Yoga, Art Therapy, Music Therapy, Alumni support, Wilderness Therapy, Sauna, acupuncture).
 If no services are found on Maps, return 1-2 core services based on the business name/category with the location modifier.
@@ -767,7 +768,13 @@ Return ONLY JSON:
             contents: promptA,
             config: {
               tools: [{ googleSearch: {} }],
-              temperature: 0.2
+              temperature: 0.2,
+              safetySettings: [
+                { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+                { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+                { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+                { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+              ]
             },
           });
           return res;
@@ -790,7 +797,13 @@ Return ONLY JSON:
             contents: promptB,
             config: {
               tools: [{ googleSearch: {} }],
-              temperature: 0.2
+              temperature: 0.2,
+              safetySettings: [
+                { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+                { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+                { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+                { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+              ]
             },
           });
           return res;
@@ -1071,7 +1084,8 @@ Return ONLY JSON:
       report: reportData,
       sources: groundingSources,
       location: mapLocationRef,
-      placesApiStatus: placesApiStatus
+      placesApiStatus: placesApiStatus,
+      googleMapsApiKey: process.env.GOOGLE_MAPS_PLATFORM_KEY || ""
     });
   } catch (err: any) {
     console.error("Audit error:", err);
@@ -1085,6 +1099,12 @@ Return ONLY JSON:
       error: errorMessage,
     });
   }
+});
+
+app.get("/api/config", (req, res) => {
+  res.json({
+    googleMapsApiKey: process.env.GOOGLE_MAPS_PLATFORM_KEY || ""
+  });
 });
 
 // Setup Vite Dev server or Serve output static assets

@@ -4,10 +4,11 @@ import { APIProvider, Map as GoogleMap, AdvancedMarker, Pin } from '@vis.gl/reac
 interface LocationMapProps {
   businessName: string;
   location?: { lat: number, lng: number };
+  apiKey?: string;
 }
 
-export function LocationMap({ businessName, location }: LocationMapProps) {
-  const apiKey = process.env.GOOGLE_MAPS_PLATFORM_KEY;
+export function LocationMap({ businessName, location, apiKey: propApiKey }: LocationMapProps) {
+  const apiKey = propApiKey || process.env.GOOGLE_MAPS_PLATFORM_KEY;
 
   if (!apiKey) {
     return (
