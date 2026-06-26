@@ -595,7 +595,7 @@ The following categories are broad, developer-facing Google Places API types. Th
       return true;
     });
 
-    const finalCompetitors = filteredCompetitors.slice(0, 5);
+    const finalCompetitors = filteredCompetitors.slice(0, 10);
     let compText = "";
     const now = new Date();
     const hundredEightyDaysAgo = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
@@ -671,7 +671,7 @@ ${compText}
     }
 
     const competitorPrompt = serviceLocation
-      ? `\nUsing the keyword "${serviceLocation}", return exactly 5 real competitors from Google Maps local results in the "competitors" array. Do NOT hallucinate competitors. Use the injected competitor data (categories, review velocity baselines) as absolute truth — do NOT web-search for competitor categories or velocity. Note if competitors keyword-stuff their business name (ranking advantage, but adding keywords risks suspension).`
+      ? `\nUsing the keyword "${serviceLocation}", return exactly 10 real competitors from Google Maps local results in the "competitors" array. Do NOT hallucinate competitors. Use the injected competitor data (categories, review velocity baselines) as absolute truth — do NOT web-search for competitor categories or velocity. Note if competitors keyword-stuff their business name (ranking advantage, but adding keywords risks suspension).`
       : "";
 
     let sourceSpecificInstructions = "";
@@ -711,7 +711,7 @@ Do NOT map them to generic roll-up categories unless no specific services are fo
 You MUST return the actual, specific services listed on the profile and website (for example, specific services like "Cocaine Addiction Treatment", "Anxiety Treatment", "Bipolar Disorder Treatment", "Fentanyl Addiction Treatment", "Depression Treatment", "PTSD Treatment", "Alcohol Detoxification", "Heroin Detox", "Supportive Housing", "Outpatient Addiction Treatment", "Intensive Outpatient Program (IOP)", "Partial Hospitalization Program (PHP)", "Medication-Assisted Treatment (MAT) Programs", etc., if they are listed on the profile).
 Be extremely thorough and list all distinct services (aim to retrieve the full list of up to 40 distinct services) rather than grouping them.
 For any service you list, you MUST append the dynamic location modifier: "in ${detectedCity}" or "in ${detectedLocation}" (e.g. "Cocaine Addiction Treatment in ${detectedCity}").
-Do NOT dump generic lists. Only list services verified as active on this business's public GMB/Google Maps profile.
+Do NOT dump generic lists. Only list services verified as active on this business's public GMB/Google Maps profile. Absolutely DO NOT hallucinate or add any treatment service that is not explicitly verified on either their public Google Maps profile services list or their website services page. Do not copy generic lists or assume services exist.
 You MUST absolutely exclude any non-taxonomy wellness items (specifically do NOT include: Reiki, Yoga, Art Therapy, Music Therapy, Alumni support, Wilderness Therapy, Sauna, acupuncture).
 If no services are found on Maps, return 1-2 core services based on the business name/category with the location modifier.
 Provide a clear sourcing note in the "servicesSource" field explaining whether they were pulled from the website or Maps.
@@ -926,12 +926,12 @@ Return ONLY JSON:
       }
     }
 
-    // Post-process to ensure we have exactly 5 competitors and no generic categories/velocities
+    // Post-process to ensure we have exactly 10 competitors and no generic categories/velocities
     const newCompetitors: any[] = [];
     const postProcNow = new Date();
     const postProc180DaysAgo = new Date(postProcNow.getTime() - 180 * 24 * 60 * 60 * 1000);
 
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 10; i++) {
       const place = finalCompetitors[i];
       const geminiComp = reportData.competitors?.[i];
       if (place) {

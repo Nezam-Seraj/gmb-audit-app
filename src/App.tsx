@@ -491,7 +491,7 @@ export default function App() {
                   <span className="text-slate-700">{report.businessDetails.reviewVelocity || "N/A"}</span>
                 </div>
                 <div>
-                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Services</span>
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Services ({report.businessDetails.services.length})</span>
                   {report.businessDetails.services && report.businessDetails.services.length > 0 ? (
                     <>
                       <div className="flex flex-wrap gap-1 mt-1">

@@ -36,11 +36,11 @@ async function testLocation(businessName, serviceLocation) {
     // 1. Competitors checks
     const competitors = data.report.competitors || [];
     console.log(`Competitors count returned: ${competitors.length}`);
-    if (competitors.length !== 5) {
-      console.error(`[FAIL] Returned ${competitors.length} competitors (expected exactly 5)!`);
+    if (competitors.length !== 10) {
+      console.error(`[FAIL] Returned ${competitors.length} competitors (expected exactly 10)!`);
       allPassed = false;
     } else {
-      console.log("[PASS] Returned exactly 5 competitors.");
+      console.log("[PASS] Returned exactly 10 competitors.");
     }
     
     // 2. Strict category matching and velocity check for competitors
@@ -280,10 +280,14 @@ async function runTests() {
   
   if (result1 && result2) {
     console.log("\nALL VERIFICATION TESTS PASSED SUCCESSFULLY!");
-    process.exit(0);
+    setTimeout(() => {
+      process.exit(0);
+    }, 1000);
   } else {
     console.error("\nSOME VERIFICATION TESTS FAILED!");
-    process.exit(1);
+    setTimeout(() => {
+      process.exit(1);
+    }, 1000);
   }
 }
 
