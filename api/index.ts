@@ -706,35 +706,11 @@ Use injected metrics if available; otherwise use search grounding. reviewCount m
 ${sourceSpecificInstructions}
 
 [SERVICES RULES]
-Search "[Business Name] Google Maps services" to find active services.
-For Addiction Treatment/Mental Health/Alcoholism categories, map findings to the exact standard GBP taxonomy listed below (use these exact strings, including any acronyms):
-- Drug Rehabilitation
-- Alcohol Rehabilitation
-- Detoxification
-- Intensive Outpatient Program (IOP)
-- Outpatient Addiction Treatment
-- Medication-Assisted Treatment (MAT) Programs
-- Substance Abuse Counseling
-- Residential Treatment
-- Partial Hospitalization Program (PHP)
-- Dual Diagnosis Treatment
-- Aftercare Support
-- Sober Living
-- Mental Health Treatment
-- Psychiatric Evaluation
-- Cognitive Behavioral Therapy (CBT)
-- Dialectical Behavior Therapy (DBT)
-- Depression/Anxiety/Trauma Treatment
-- Medication Management
-- Psychotherapy
-- Alcoholism Treatment
-- Alcohol Detoxification
-- Alcohol Counseling
-- Relapse Prevention Planning
-- Support Groups
-
+Search "[Business Name] Google Maps services" to find the actual list of active services listed on the public profile.
+Do NOT map them to generic roll-up categories unless no specific services are found.
+You MUST return the actual, specific services listed on the profile (for example, specific services like "Cocaine Addiction Treatment", "Anxiety Treatment", "Bipolar Disorder Treatment", "Fentanyl Addiction Treatment", "Depression Treatment", "PTSD Treatment", "Alcohol Detoxification", etc., if they are listed on the profile).
 For any service you list, you MUST append the dynamic location modifier: "in ${detectedCity}" or "in ${detectedLocation}" (e.g. "Intensive Outpatient Program (IOP) in ${detectedCity}").
-Do NOT dump the entire taxonomy list. Only list services verified as active on this business's public GMB/Google Maps profile.
+Do NOT dump generic lists. Only list services verified as active on this business's public GMB/Google Maps profile.
 You MUST absolutely exclude any non-taxonomy wellness items (specifically do NOT include: Reiki, Yoga, Art Therapy, Music Therapy, Alumni support, Wilderness Therapy, Sauna, acupuncture).
 If no services are found on Maps, return 1-2 core services based on the business name/category with the location modifier.
 Provide a clear sourcing note in the "servicesSource" field explaining whether they were pulled from the website or Maps.
