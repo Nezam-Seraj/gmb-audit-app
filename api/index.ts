@@ -860,9 +860,13 @@ Provide a clear sourcing note in the "servicesSource" field explaining whether t
 
 All review velocities must be numerical ("X reviews in the last 180 days"). Use injected competitor categories/velocities as truth — no web searches for them.
 Use search grounding to verify business details and find active social profiles.
+For businessDetails, you MUST also extract the following from the GMB/Google Maps listing:
+- "primaryCategory": The exact primary merchant category (e.g., "Addiction Treatment Center", "Mental Health Clinic"). Do not report generic developer types.
+- "secondaryCategories": An array of secondary merchant categories listed on their GMB profile.
+- "attributes": An array of GMB business attributes and highlights (e.g. "Wheelchair accessible entrance", "LGBTQ+ friendly", "Veteran-led", "Restroom", etc., if present).
 
 Return ONLY JSON:
-{"businessName":"string","summary":"string","competitors":[{"name":"string","estimatedScore":number,"keyAdvantage":"string","weakness":"string","keywordsInName":boolean,"primaryCategory":"string","secondaryCategories":["string"],"reviewVelocity":"string"}],"businessDetails":{"name":"string","address":"string","phone":"string","websiteUrl":"string","reviewCount":number,"reviewVelocity":"string","services":["string"],"socials":["string"],"servicesSource":"string","placeId":"string"}}`;
+{"businessName":"string","summary":"string","competitors":[{"name":"string","estimatedScore":number,"keyAdvantage":"string","weakness":"string","keywordsInName":boolean,"primaryCategory":"string","secondaryCategories":["string"],"reviewVelocity":"string"}],"businessDetails":{"name":"string","address":"string","phone":"string","websiteUrl":"string","reviewCount":number,"reviewVelocity":"string","services":["string"],"socials":["string"],"servicesSource":"string","placeId":"string","primaryCategory":"string","secondaryCategories":["string"],"attributes":["string"]}}`;
 
     const promptB = `You are a Local SEO and GBP optimization expert. "Circle Social" is NOT the business being audited.
 Analyze: ${searchTarget}.

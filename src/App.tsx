@@ -490,6 +490,40 @@ export default function App() {
                   <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Review Velocity (180 days)</span>
                   <span className="text-slate-700">{report.businessDetails.reviewVelocity || "N/A"}</span>
                 </div>
+                {report.businessDetails.primaryCategory && (
+                  <div>
+                    <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Primary Category</span>
+                    <span className="text-slate-700">{report.businessDetails.primaryCategory}</span>
+                  </div>
+                )}
+                {report.businessDetails.secondaryCategories && 
+                 Array.isArray(report.businessDetails.secondaryCategories) && 
+                 report.businessDetails.secondaryCategories.length > 0 && (
+                  <div>
+                    <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Secondary Categories</span>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {report.businessDetails.secondaryCategories.map((cat, idx) => (
+                        <span key={idx} className="bg-teal-50 text-teal-700 border border-teal-100 px-2 py-0.5 rounded text-[10px]">
+                          {cat}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {report.businessDetails.attributes && 
+                 Array.isArray(report.businessDetails.attributes) && 
+                 report.businessDetails.attributes.length > 0 && (
+                  <div>
+                    <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Attributes & Highlights</span>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {report.businessDetails.attributes.map((attr, idx) => (
+                        <span key={idx} className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[10px]">
+                          {attr}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div>
                   <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Services ({report.businessDetails.services.length})</span>
                   {report.businessDetails.services && report.businessDetails.services.length > 0 ? (
